@@ -196,6 +196,9 @@ def read_sacct_output(output):
         ],
     )
 
+def read_sacct_file(path):
+    with open(path, "r") as handle:
+        return read_sacct_output(handle.read())
 
 def fetch_sacct(config=None):
 

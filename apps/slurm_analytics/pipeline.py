@@ -9,7 +9,7 @@ from .normalize import (
     split_jobs_and_steps,
 )
 
-from .sacct import fetch_sacct
+from .sacct import fetch_sacct, read_sacct_file
 
 
 class IngestionResult(object):
@@ -27,11 +27,12 @@ class IngestionResult(object):
         self.consolidated_jobs = consolidated_jobs
 
 
-def ingest_sacct(config=None):
+def ingest_sacct(config=None, input_file=None, timing=None):
 
-    raw = fetch_sacct(
-        config
-    )
+    if input_file:
+        raw = read_sacct_file(input_file)
+    else:
+        raw = fetch_sacct(config)
 
     normalized = classify_and_normalize(
         raw

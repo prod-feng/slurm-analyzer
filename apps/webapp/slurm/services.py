@@ -19,10 +19,13 @@ from slurm_analytics.storage import (
     replace_accounts,
     set_metadata,
     store_ingestion,
+    database_path,
 )
 
 from .state import SlurmSnapshot, state
+import logging
 
+logger = logging.getLogger(__name__)
 UTC = timezone.utc
 DEFAULT_OVERLAP_MINUTES = 60
 
@@ -153,5 +156,69 @@ def refresh_slurm(sacct_config=None, refresh_nodes=True):
     return snapshot
 
 
+
+def _build_snapshot_from_db():
+    """Rebuild the snapshot from persistent data without querying Slurm."""
+    db_path = database_path()
+
+    # Do not create a new, empty DuckDB just to check readiness.
+    if not db_path.is_file():
+        return None
+
+    con = connect()
+    try:
+        tables = {
+            row[0] for row in con.execute("SHOW TABLES").fetchall()
+        }
+
+        if "ingestion_metadata" not in tables:
+            return None
+
+        if get_metadata(con, "initialized", "false") != "true":
+            return None
+
+        # Both tables are required by the current snapshot/API contract.
+        if not {"jobs", "job_steps"}.issubset(tables):
+            logger.warning(
+                "DuckDB is initialized, but jobs or job_steps is missing."
+            )
+            return None
+    finally:
+        con.close()
+
+    all_jobs = _load_stored_frame("jobs")
+    all_steps = _load_stored_frame("job_steps")
+
+    if all_jobs is None or all_steps is None:
+        return None
+
+    ingestion = IngestionResult(
+        raw=pl.DataFrame(),
+        jobs=all_jobs,
+        steps=all_steps,
+        consolidated_jobs=all_jobs,
+    )
+
+    snapshot = SlurmSnapshot(
+        ingestion=ingestion,
+        analytics=analyze_jobs(all_jobs),
+        nodes=None,
+        refreshed_at=datetime.now(UTC),
+    )
+
+    logger.info(
+        "Rebuilt Slurm snapshot from DuckDB: %d jobs, %d steps.",
+        all_jobs.height,
+        all_steps.height,
+    )
+    return snapshot
+
+
 def get_snapshot():
-    return state.get()
+    """Return the current snapshot, recovering from DuckDB if needed."""
+    try:
+        return state.get_or_build(_build_snapshot_from_db)
+    except Exception:
+        logger.exception("Unable to rebuild Slurm snapshot from DuckDB.")
+        return None
+

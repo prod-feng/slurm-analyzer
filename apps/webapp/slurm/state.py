@@ -81,6 +81,23 @@ class SlurmState(object):
             self._load_if_newer()
             return self._snapshot
 
+
+    def get_or_build(self, builder):
+        """Return the current snapshot, rebuilding it once if necessary."""
+        with self._lock:
+            self._load_if_newer()
+
+            if self._snapshot is not None:
+                return self._snapshot
+
+            snapshot = builder()
+            if snapshot is None:
+                return None
+
+            # RLock allows replace() to acquire the same lock safely.
+            self.replace(snapshot)
+            return self._snapshot
+
     def replace(self, snapshot):
         """Publish a snapshot atomically to memory and disk."""
         self.path.parent.mkdir(parents=True, exist_ok=True)

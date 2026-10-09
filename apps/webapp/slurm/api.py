@@ -339,6 +339,30 @@ def api_refresh(request):
 @require_GET
 def api_db_metadata(request):
     from slurm_analytics.storage import connect, get_metadata
+
+    con = connect()
+    try:
+        initialized_value = get_metadata(con, "initialized", "false")
+        database = con.execute("PRAGMA database_list").fetchall()
+
+        print(
+            f"DEBUG api_db_metadata: "
+            f"initialized={initialized_value!r}, database={database}",
+            flush=True,
+        )
+
+        return JsonResponse({
+            "ready": initialized_value == "true",
+            "initialized_through": get_metadata(con, "initialized_through"),
+            "last_refresh_start": get_metadata(con, "last_refresh_start"),
+            "last_refresh_end": get_metadata(con, "last_refresh_end"),
+        })
+    finally:
+        con.close()
+
+@require_GET
+def api_db_metadata_debug(request):
+    from slurm_analytics.storage import connect, get_metadata
     con = connect()
     try:
         initialized = get_metadata(con, "initialized", "false") == "true"
