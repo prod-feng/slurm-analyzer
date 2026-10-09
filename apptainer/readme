@@ -1,0 +1,3 @@
+singularity build --fakeroot   slurm-manager-ldap-django.sif  slurm-manager.def
+
+

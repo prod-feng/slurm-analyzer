@@ -1,0 +1,351 @@
+import polars as pl
+
+from slurm_analytics.normalize import (
+    classify_and_normalize,
+    consolidate_jobs,
+    prepare_steps,
+    split_jobs_and_steps,
+)
+
+
+def make_fixture():
+
+    return pl.DataFrame(
+        [
+            {
+                "jobid": "48327",
+                "jobidraw": "48327",
+                "cluster": "cluster1",
+                "partition": "gpu",
+                "qos": "normal",
+                "account": "test",
+                "group": "users",
+                "gid": "1000",
+                "user": "alice",
+                "uid": "1000",
+                "submit": (
+                    "2026-09-29T23:00:00"
+                ),
+                "eligible": (
+                    "2026-09-29T23:00:00"
+                ),
+                "start": (
+                    "2026-09-29T23:11:11"
+                ),
+                "end": (
+                    "2026-09-30T01:20:30"
+                ),
+                "elapsed": "02:09:19",
+                "exitcode": "0:0",
+                "state": "COMPLETED",
+                "nnodes": "1",
+                "ncpus": "4",
+                "reqcpus": "4",
+                "reqmem": "128G",
+                "reqtres": (
+                    "cpu=4,mem=128G,node=1"
+                ),
+                "alloctres": (
+                    "cpu=4,gres/gpu=1,"
+                    "mem=128G,node=1"
+                ),
+                "timelimit": "01:00:00",
+                "nodelist": "gpu011",
+                "jobname": "test",
+                "tresusageinave": "",
+            },
+
+            {
+                "jobid": "48327.batch",
+                "jobidraw": "48327.batch",
+                "cluster": "cluster1",
+                "partition": "gpu",
+                "qos": "normal",
+                "account": "test",
+                "group": "users",
+                "gid": "1000",
+                "user": "alice",
+                "uid": "1000",
+                "submit": (
+                    "2026-09-29T23:00:00"
+                ),
+                "eligible": (
+                    "2026-09-29T23:00:00"
+                ),
+                "start": (
+                    "2026-09-29T23:11:11"
+                ),
+                "end": (
+                    "2026-09-30T01:20:30"
+                ),
+                "elapsed": "02:09:19",
+                "exitcode": "0:0",
+                "state": "COMPLETED",
+                "nnodes": "1",
+                "ncpus": "4",
+                "reqcpus": "4",
+                "reqmem": "",
+                "reqtres": "",
+                "alloctres": (
+                    "cpu=4,gres/gpu=1,"
+                    "mem=128G,node=1"
+                ),
+                "timelimit": "",
+                "nodelist": "gpu011",
+                "jobname": "batch",
+                "tresusageinave": (
+                    "cpu=04:05:55,"
+                    "energy=0,"
+                    "fs/disk=35006195726,"
+                    "gres/gpumem=2278M,"
+                    "gres/gpuutil=10,"
+                    "mem=65481088K,"
+                    "pages=0,"
+                    "vmem=106892948K"
+                ),
+            },
+
+            {
+                "jobid": "48327.extern",
+                "jobidraw": "48327.extern",
+                "cluster": "cluster1",
+                "partition": "gpu",
+                "qos": "normal",
+                "account": "test",
+                "group": "users",
+                "gid": "1000",
+                "user": "alice",
+                "uid": "1000",
+                "submit": (
+                    "2026-09-29T23:00:00"
+                ),
+                "eligible": (
+                    "2026-09-29T23:00:00"
+                ),
+                "start": (
+                    "2026-09-29T23:11:11"
+                ),
+                "end": (
+                    "2026-09-30T01:20:30"
+                ),
+                "elapsed": "02:09:19",
+                "exitcode": "0:0",
+                "state": "COMPLETED",
+                "nnodes": "1",
+                "ncpus": "4",
+                "reqcpus": "4",
+                "reqmem": "",
+                "reqtres": "",
+                "alloctres": (
+                    "cpu=4,gres/gpu=1,"
+                    "mem=128G,node=1"
+                ),
+                "timelimit": "",
+                "nodelist": "gpu011",
+                "jobname": "extern",
+                "tresusageinave": "",
+            },
+
+            {
+                "jobid": "48327.99",
+                "jobidraw": "48327.99",
+                "cluster": "cluster1",
+                "partition": "gpu",
+                "qos": "normal",
+                "account": "test",
+                "group": "users",
+                "gid": "1000",
+                "user": "alice",
+                "uid": "1000",
+                "submit": (
+                    "2026-09-29T23:00:00"
+                ),
+                "eligible": (
+                    "2026-09-29T23:00:00"
+                ),
+                "start": (
+                    "2026-09-29T23:11:11"
+                ),
+                "end": (
+                    "2026-09-30T01:20:30"
+                ),
+                "elapsed": "02:09:19",
+                "exitcode": "0:0",
+                "state": "COMPLETED",
+                "nnodes": "1",
+                "ncpus": "4",
+                "reqcpus": "4",
+                "reqmem": "",
+                "reqtres": "",
+                "alloctres": (
+                    "cpu=4,gres/gpu=1,"
+                    "mem=128G,node=1"
+                ),
+                "timelimit": "",
+                "nodelist": "gpu011",
+                "jobname": "application",
+                "tresusageinave": (
+                    "cpu=04:05:55,"
+                    "energy=0,"
+                    "fs/disk=35006195726,"
+                    "gres/gpumem=2278M,"
+                    "gres/gpuutil=10,"
+                    "mem=65481088K,"
+                    "pages=0,"
+                    "vmem=106892948K"
+                ),
+            },
+        ]
+    )
+
+
+def test_classification():
+
+    raw = make_fixture()
+
+    normalized = (
+        classify_and_normalize(
+            raw
+        )
+    )
+
+    jobs, steps = (
+        split_jobs_and_steps(
+            normalized
+        )
+    )
+
+    assert jobs.height == 1
+    assert steps.height == 3
+
+    assert (
+        steps.filter(
+            pl.col(
+                "step_type"
+            ) == "application"
+        ).height
+        == 1
+    )
+
+
+def test_step_preparation():
+
+    raw = make_fixture()
+
+    normalized = (
+        classify_and_normalize(
+            raw
+        )
+    )
+
+    _, steps = (
+        split_jobs_and_steps(
+            normalized
+        )
+    )
+
+    steps = prepare_steps(
+        steps
+    )
+
+    workload = steps.filter(
+        pl.col(
+            "is_workload_step"
+        )
+    )
+
+    assert workload.height == 1
+
+    assert (
+        workload["gpu_util"][0]
+        == 10
+    )
+
+    assert (
+        workload[
+            "gpu_mem_bytes"
+        ][0]
+        == 2278 * 1024 * 1024
+    )
+
+
+def test_consolidation():
+
+    raw = make_fixture()
+
+    normalized = (
+        classify_and_normalize(
+            raw
+        )
+    )
+
+    jobs, steps = (
+        split_jobs_and_steps(
+            normalized
+        )
+    )
+
+    steps = prepare_steps(
+        steps
+    )
+
+    result = consolidate_jobs(
+        jobs,
+        steps,
+    )
+
+    assert result.height == 1
+
+    row = result.row(
+        0,
+        named=True,
+    )
+
+    assert (
+        row["job_id"]
+        == "48327"
+    )
+
+    assert (
+        row["jobid"]
+        == "48327"
+    )
+
+    assert (
+        row["jobidraw"]
+        == "48327"
+    )
+
+    assert row["ncpus"] == 4
+    assert row["nnodes"] == 1
+
+    assert (
+        row["nodelist"]
+        == "gpu011"
+    )
+
+    assert (
+        row["gpu_count"]
+        == 1
+    )
+
+    assert (
+        row["gpu_util_max"]
+        == 10
+    )
+
+    assert (
+        row["gpu_mem_max_bytes"]
+        == 2278 * 1024 * 1024
+    )
+
+    assert (
+        row["workload_step_count"]
+        == 1
+    )
+
+    assert (
+        row["step_count"]
+        == 3
+    )
+

@@ -1,0 +1,13 @@
+Django>=5.2,<6.0
+gunicorn>=23.0
+psycopg[binary]>=3.2
+polars>=1.0
+djangorestframework>=3.14
+duckdb
+PyYAML
+pyarrow
+pytz
+plotly>=6.0
+pydantic>=2.0
+pytest>=8.0
+pytest-django>=4.0

@@ -1,0 +1,91 @@
+project/
+├── manage.py
+├── slurm_analytics/
+│   ├── __init__.py
+│   ├── sacct.py
+│   ├── parser.py
+│   ├── normalize.py
+│   ├── node_inventory.py
+│   ├── pipeline.py
+│   └── tests/
+│       ├── test_parser.py
+│       └── test_normalize.py
+├── requirements.txt
+└── ...
+
+
+
+
+ test the Slurm command without the rest of the application:
+
+from slurm_analytics.sacct import (
+    SacctConfig,
+    build_sacct_command,
+    run_sacct,
+)
+
+config = SacctConfig(
+    start="2026-09-29",
+    end="2026-09-30",
+)
+
+print(
+    " ".join(
+        build_sacct_command(config)
+    )
+)
+
+output = run_sacct(config)
+
+print(output)
+
+
+
+
+
+from slurm_analytics.pipeline import (
+    ingest_sacct,
+)
+
+from slurm_analytics.sacct import (
+    SacctConfig,
+)
+
+from slurm_analytics.pipeline import ingest_sacct
+
+
+config = SacctConfig(
+    start="2026-09-29",
+    end="2026-09-30",
+)
+
+result = ingest_sacct(
+    config
+)
+
+print(
+    result.consolidated_jobs
+)
+
+print(
+    result.steps
+)
+
+
+
+print(result.raw.columns)
+
+
+
+
+print(
+    result.raw.select([
+        "jobid",
+        "jobidraw",
+        "tresusageinave",
+    ]).head(20)
+)
+
+
+
+

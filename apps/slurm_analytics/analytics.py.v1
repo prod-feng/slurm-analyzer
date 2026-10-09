@@ -1,0 +1,338 @@
+from __future__ import annotations
+
+import polars as pl
+
+
+def summarize_jobs(df: pl.DataFrame) -> pl.DataFrame:
+    """Return high-level job counts and runtime statistics."""
+
+    if df.is_empty():
+        return pl.DataFrame(
+            {
+                "job_count": [0],
+                "running_count": [0],
+                "completed_count": [0],
+                "failed_count": [0],
+                "total_runtime_seconds": [0],
+                "avg_runtime_seconds": [None],
+            }
+        )
+
+    return df.select(
+        [
+            pl.len().alias("job_count"),
+
+            (
+                pl.col("state")
+                .cast(pl.String)
+                .str.to_uppercase()
+                .str.starts_with("RUNNING")
+                .sum()
+                .alias("running_count")
+            ),
+
+            (
+                pl.col("state")
+                .cast(pl.String)
+                .str.to_uppercase()
+                .str.starts_with("COMPLETED")
+                .sum()
+                .alias("completed_count")
+            ),
+
+            (
+                ~pl.col("state")
+                .cast(pl.String)
+                .str.to_uppercase()
+                .str.starts_with("COMPLETED")
+            )
+            .sum()
+            .alias("failed_count"),
+
+            pl.col("elapsed_seconds")
+            .fill_null(0)
+            .sum()
+            .alias("total_runtime_seconds"),
+
+            pl.col("elapsed_seconds")
+            .mean()
+            .alias("avg_runtime_seconds"),
+        ]
+    )
+
+
+def summarize_gpu_jobs(df: pl.DataFrame) -> pl.DataFrame:
+    """Summarize jobs with allocated GPUs."""
+
+    if df.is_empty():
+        return pl.DataFrame()
+
+    gpu = df.filter(
+        pl.col("gpu_count").fill_null(0) > 0
+    )
+
+    if gpu.is_empty():
+        return pl.DataFrame(
+            {
+                "gpu_job_count": [0],
+                "allocated_gpu_count": [0.0],
+                "gpu_util_min": [None],
+                "gpu_util_max": [None],
+                "gpu_mem_max_bytes": [None],
+            }
+        )
+
+    return gpu.select(
+        [
+            pl.len().alias("gpu_job_count"),
+
+            pl.col("gpu_count")
+            .sum()
+            .alias("allocated_gpu_count"),
+
+            pl.col("gpu_util_min")
+            .min()
+            .alias("gpu_util_min"),
+
+            pl.col("gpu_util_max")
+            .max()
+            .alias("gpu_util_max"),
+
+            pl.col("gpu_mem_max_bytes")
+            .max()
+            .alias("gpu_mem_max_bytes"),
+        ]
+    )
+
+
+def summarize_partitions(df: pl.DataFrame) -> pl.DataFrame:
+    """Return job counts and GPU counts by partition."""
+
+    if df.is_empty() or "partition" not in df.columns:
+        return pl.DataFrame()
+
+    return (
+        df.group_by("partition")
+        .agg(
+            [
+                pl.len().alias("job_count"),
+
+                pl.col("gpu_count")
+                .fill_null(0)
+                .sum()
+                .alias("gpu_count"),
+
+                pl.col("elapsed_seconds")
+                .fill_null(0)
+                .sum()
+                .alias("runtime_seconds"),
+            ]
+        )
+        .sort("job_count", descending=True)
+    )
+
+import polars as pl
+
+
+def summarize_users(df):
+    """
+    Summarize job activity by user.
+
+    This function is deliberately schema-aware.  Slurm fields such as
+    elapsed time, memory, and resource strings can arrive as strings,
+    so we only aggregate columns that are actually numeric.
+    """
+
+    if df.is_empty():
+        return pl.DataFrame(
+            schema={
+                "user": pl.Utf8,
+                "job_count": pl.Int64,
+                "total_elapsed_seconds": pl.Int64,
+                "total_cpu": pl.Int64,
+                "total_gpu": pl.Float64,
+            }
+        )
+
+    # ------------------------------------------------------------
+    # Required grouping column
+    # ------------------------------------------------------------
+
+    if "user" not in df.columns:
+        return pl.DataFrame()
+
+    # ------------------------------------------------------------
+    # Build aggregations only from known numeric fields.
+    #
+    # Do NOT blindly sum every column.
+    # ------------------------------------------------------------
+
+    aggregations = [
+        pl.len().alias("job_count"),
+    ]
+
+    if "elapsed_seconds" in df.columns:
+        aggregations.append(
+            pl.col("elapsed_seconds")
+            .cast(pl.Int64, strict=False)
+            .sum()
+            .alias("total_elapsed_seconds")
+        )
+
+    if "ncpus" in df.columns:
+        aggregations.append(
+            pl.col("ncpus")
+            .cast(pl.Int64, strict=False)
+            .sum()
+            .alias("total_cpu")
+        )
+
+    if "gpu_count" in df.columns:
+        aggregations.append(
+            pl.col("gpu_count")
+            .cast(pl.Float64, strict=False)
+            .sum()
+            .alias("total_gpu")
+        )
+
+    result = (
+        df.group_by("user")
+        .agg(aggregations)
+        .sort("job_count", descending=True)
+    )
+
+    return result
+
+def bad_summarize_users(df: pl.DataFrame) -> pl.DataFrame:
+    """Return job and resource usage by user."""
+
+    if df.is_empty() or "user" not in df.columns:
+        return pl.DataFrame()
+
+    return (
+        df.group_by("user")
+        .agg(
+            [
+                pl.len().alias("job_count"),
+
+                pl.col("gpu_count")
+                .fill_null(0)
+                .sum()
+                .alias("gpu_count"),
+
+                pl.col("nnodes")
+                .fill_null(0)
+                .sum()
+                .alias("node_count"),
+
+                pl.col("elapsed_seconds")
+                .fill_null(0)
+                .sum()
+                .alias("runtime_seconds"),
+            ]
+        )
+        .sort("job_count", descending=True)
+    )
+
+
+def runtime_statistics(df: pl.DataFrame) -> pl.DataFrame:
+    """Return runtime percentiles and basic statistics."""
+
+    if df.is_empty():
+        return pl.DataFrame()
+
+    return df.select(
+        [
+            pl.col("elapsed_seconds")
+            .min()
+            .alias("min_seconds"),
+
+            pl.col("elapsed_seconds")
+            .mean()
+            .alias("mean_seconds"),
+
+            pl.col("elapsed_seconds")
+            .median()
+            .alias("median_seconds"),
+
+            pl.col("elapsed_seconds")
+            .quantile(0.95)
+            .alias("p95_seconds"),
+
+            pl.col("elapsed_seconds")
+            .quantile(0.99)
+            .alias("p99_seconds"),
+
+            pl.col("elapsed_seconds")
+            .max()
+            .alias("max_seconds"),
+        ]
+    )
+
+
+def gpu_efficiency(df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Summarize GPU telemetry.
+
+    NULL GPU utilization means that telemetry was not reported.
+    It is deliberately NOT converted to zero.
+    """
+
+    if df.is_empty():
+        return pl.DataFrame()
+
+    gpu = df.filter(
+        pl.col("gpu_count").fill_null(0) > 0
+    )
+
+    if gpu.is_empty():
+        return pl.DataFrame()
+
+    return gpu.select(
+        [
+            pl.len().alias("gpu_job_count"),
+
+            (
+                pl.col("gpu_util_max").is_not_null()
+            )
+            .sum()
+            .alias("jobs_with_gpu_telemetry"),
+
+            (
+                pl.col("gpu_util_max").is_null()
+            )
+            .sum()
+            .alias("jobs_without_gpu_telemetry"),
+
+            pl.col("gpu_util_max")
+            .mean()
+            .alias("average_gpu_utilization"),
+
+            pl.col("gpu_util_max")
+            .max()
+            .alias("maximum_gpu_utilization"),
+
+            pl.col("gpu_mem_max_bytes")
+            .max()
+            .alias("maximum_gpu_memory_bytes"),
+        ]
+    )
+
+
+def analyze_jobs(df: pl.DataFrame) -> dict:
+    """
+    Run all currently supported analytics.
+
+    This function does not modify df.
+    """
+
+    return {
+        "summary": summarize_jobs(df),
+        "gpu": summarize_gpu_jobs(df),
+        "gpu_efficiency": gpu_efficiency(df),
+        "runtime": runtime_statistics(df),
+        "partitions": summarize_partitions(df),
+        "users": summarize_users(df),
+    }
+
+

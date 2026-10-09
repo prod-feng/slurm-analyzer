@@ -1,0 +1,7 @@
+Metadata-Version: 2.4
+Name: slurm-analytics
+Version: 0.1.0
+Summary: Slurm accounting ingestion and analytics
+Requires-Python: >=3.8
+Dynamic: requires-python
+Dynamic: summary

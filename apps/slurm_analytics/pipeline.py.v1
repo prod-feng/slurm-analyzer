@@ -1,0 +1,99 @@
+from __future__ import print_function
+
+from .normalize import (
+    classify_and_normalize,
+    consolidate_jobs,
+    prepare_steps,
+    split_jobs_and_steps,
+)
+
+from .sacct import fetch_sacct
+
+
+class IngestionResult(object):
+    """Container for all stages of the sacct ingestion pipeline."""
+
+    def __init__(
+        self,
+        raw,
+        jobs,
+        steps,
+        consolidated_jobs,
+    ):
+        self.raw = raw
+        self.jobs = jobs
+        self.steps = steps
+        self.consolidated_jobs = consolidated_jobs
+
+
+def ingest_sacct(config=None):
+    """
+    Run the complete sacct ingestion pipeline.
+
+    Pipeline:
+
+        sacct
+          |
+          v
+        raw DataFrame
+          |
+          v
+        normalized DataFrame
+          |
+          +---- jobs
+          |
+          +---- steps
+                  |
+                  v
+          consolidated jobs
+
+    Parameters
+    ----------
+    config : SacctConfig, optional
+        Configuration for the sacct command.
+
+    Returns
+    -------
+    IngestionResult
+    """
+
+    # 1. Run sacct and read the raw output.
+    raw = fetch_sacct(config)
+
+    # 2. Parse JobID/JobIDRaw, timestamps, durations,
+    #    memory, GPU utilization, GPU memory, etc.
+    normalized = classify_and_normalize(raw)
+
+    # 3. Separate allocation/job records from step records.
+    jobs, steps = split_jobs_and_steps(
+        normalized
+    )
+
+    # 4. Mark batch/extern/application steps and
+    #    retain the useful workload information.
+    steps = prepare_steps(
+        steps
+    )
+
+    # 5. Consolidate:
+    #
+    #       48327
+    #       48327.batch
+    #       48327.extern
+    #       48327.99
+    #
+    #    into one logical job while preserving
+    #    the workload information from the steps.
+    consolidated = consolidate_jobs(
+        jobs,
+        steps,
+    )
+
+    return IngestionResult(
+        raw=raw,
+        jobs=jobs,
+        steps=steps,
+        consolidated_jobs=consolidated,
+    )
+
+

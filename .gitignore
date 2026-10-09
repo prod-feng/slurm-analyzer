@@ -1,0 +1,16 @@
+*.3.11
+*.pyc
+*.old
+*.1
+*.2
+*.sif
+abs.*
+manage.py
+mytest*
+*.bad*
+nohup.out
+*.yaml
+apps/data/slurm.duckdb
+refresh_slurm_data.log
+.slurm_snapshot.pkl
+__pycache__/

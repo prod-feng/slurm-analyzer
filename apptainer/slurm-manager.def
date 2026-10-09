@@ -1,0 +1,45 @@
+Bootstrap: docker
+From: python:3.12-slim-bookworm
+
+%labels
+    Author HPC Development Team
+    Application Slurm Manager
+    Description Django web application for Slurm management
+
+%environment
+    export LANG=C.UTF-8
+    export LC_ALL=C.UTF-8
+    export PYTHONUNBUFFERED=1
+    export PYTHONDONTWRITEBYTECODE=1
+
+%files
+    requirements.txt /opt/slurm-manager/requirements.txt
+
+%post
+    export DEBIAN_FRONTEND=noninteractive
+
+    apt-get update
+
+    apt-get install -y --no-install-recommends \
+        gcc \
+        git \
+        curl \
+        ca-certificates \
+        less \
+        procps \
+        libnss-ldapd
+
+    python -m pip install --upgrade pip
+
+    python -m pip install \
+        -r /opt/slurm-manager/requirements.txt
+
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
+
+%runscript
+    cd /workspace
+
+    exec python manage.py runserver \
+        0.0.0.0:8000
+

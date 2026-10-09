@@ -1,0 +1,2 @@
+[console_scripts]
+slurm-analytics = slurm_analytics.cli:main

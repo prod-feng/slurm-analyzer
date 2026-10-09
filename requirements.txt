@@ -1,0 +1,6 @@
+Django>=4.2,<6
+djangorestframework>=3.14
+polars>=1.0
+
+duckdb>=1.0
+PyYAML>=6.0
