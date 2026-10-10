@@ -19,6 +19,7 @@ def run_scontrol_show_node(
         "scontrol",
         "show",
         "node",
+        "-a",
     ]
 
     if nodes:

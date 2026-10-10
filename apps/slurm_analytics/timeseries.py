@@ -68,8 +68,35 @@ def _empty_frame():
             "jobs_started": pl.Int64,
             "jobs_completed": pl.Int64,
             "jobs_failed": pl.Int64,
+            "jobs_submitted": pl.Int64,
+            "avg_allocated_cpus_per_job": pl.Float64,
+            "avg_allocated_gpus_per_job": pl.Float64,
+            "avg_requested_memory_gib_per_job": pl.Float64,
+            "avg_recorded_memory_gib_per_job": pl.Float64,
+            "avg_elapsed_runtime_seconds": pl.Float64,
+            "avg_time_limit_seconds": pl.Float64,
         }
     )
+
+
+
+
+def _mean(values):
+    return (sum(values) / len(values)) if values else None
+
+
+def _parse_memory_bytes(value):
+    """Parse a Slurm MaxRSS value (e.g. 1200K, 3G); return None if absent."""
+    if value is None:
+        return None
+    import re
+    match = re.match(r"^\s*([0-9]+(?:\.[0-9]+)?)\s*([KMGTPE]?)\s*[cCnN]?\s*$", str(value), re.I)
+    if not match:
+        return None
+    number = float(match.group(1))
+    unit = match.group(2).upper()
+    powers = {"": 0, "K": 1, "M": 2, "G": 3, "T": 4, "P": 5, "E": 6}
+    return number * (1024.0 ** powers[unit])
 
 
 def job_time_series(df, start=None, end=None, interval="1h"):
@@ -119,22 +146,40 @@ def job_time_series(df, start=None, end=None, interval="1h"):
     # Event deltas: resources/jobs become active at start and inactive at end.
     events = {}
     starts = {}
+    submissions = {}
     terminals = {}
+    allocation_samples = {}
+    runtime_samples = {}
 
     columns = set(df.columns)
     rows = df.select(
         [
             c for c in [
+                "submit_time",
                 "start_time",
                 "end_time",
                 "state_category",
                 "ncpus",
                 "gpu_count",
+                "allocated_memory_bytes",
+                # The historical API enriches each job with parsed MaxRSS from
+                # job-step accounting. Include that field here; otherwise the
+                # value is silently dropped and the Average recorded MaxRSS
+                # series stays empty even when step telemetry exists.
+                "max_rss_bytes",
+                "maxrss",
+                "elapsed_seconds",
+                "time_limit_seconds",
             ] if c in columns
         ]
     ).to_dicts()
 
     for row in rows:
+        submitted_at = _parse_datetime(row.get("submit_time"))
+        if submitted_at is not None and requested_start <= submitted_at < requested_end:
+            submit_bucket = _bucket_floor(submitted_at, bucket_delta)
+            submissions[submit_bucket] = submissions.get(submit_bucket, 0) + 1
+
         job_start = _parse_datetime(row.get("start_time"))
         if job_start is None:
             continue
@@ -174,7 +219,33 @@ def job_time_series(df, start=None, end=None, interval="1h"):
         if job_start >= requested_start:
             starts[start_bucket] = starts.get(start_bucket, 0) + 1
 
+        if job_start >= requested_start and job_start < requested_end:
+            sample = allocation_samples.setdefault(start_bucket, {
+                "cpus": [], "gpus": [], "requested_memory": [], "recorded_memory": []
+            })
+            sample["cpus"].append(cpu)
+            sample["gpus"].append(gpu)
+            memory_bytes = row.get("allocated_memory_bytes")
+            if memory_bytes is not None:
+                try:
+                    sample["requested_memory"].append(float(memory_bytes) / (1024.0 ** 3))
+                except (TypeError, ValueError):
+                    pass
+            rss_bytes = _parse_memory_bytes(row.get("max_rss_bytes", row.get("maxrss")))
+            if rss_bytes is not None:
+                sample["recorded_memory"].append(rss_bytes / (1024.0 ** 3))
+
         if job_end <= requested_end and job_end > requested_start:
+            if state in ("completed", "failed", "cancelled", "other"):
+                elapsed = row.get("elapsed_seconds")
+                limit = row.get("time_limit_seconds")
+                sample = runtime_samples.setdefault(end_bucket, {"elapsed": [], "limit": []})
+                if elapsed is not None:
+                    try: sample["elapsed"].append(float(elapsed))
+                    except (TypeError, ValueError): pass
+                if limit is not None:
+                    try: sample["limit"].append(float(limit))
+                    except (TypeError, ValueError): pass
             if state == "completed":
                 terminals[end_bucket] = terminals.get(end_bucket, [0, 0, 0])
                 terminals[end_bucket][0] += 1
@@ -208,10 +279,34 @@ def job_time_series(df, start=None, end=None, interval="1h"):
                 "jobs_started": starts.get(timestamp, 0),
                 "jobs_completed": terminal[0],
                 "jobs_failed": terminal[1],
+                "jobs_submitted": submissions.get(timestamp, 0),
+                "avg_allocated_cpus_per_job": _mean(allocation_samples.get(timestamp, {}).get("cpus", [])),
+                "avg_allocated_gpus_per_job": _mean(allocation_samples.get(timestamp, {}).get("gpus", [])),
+                "avg_requested_memory_gib_per_job": _mean(allocation_samples.get(timestamp, {}).get("requested_memory", [])),
+                "avg_recorded_memory_gib_per_job": _mean(allocation_samples.get(timestamp, {}).get("recorded_memory", [])),
+                "avg_elapsed_runtime_seconds": _mean(runtime_samples.get(timestamp, {}).get("elapsed", [])),
+                "avg_time_limit_seconds": _mean(runtime_samples.get(timestamp, {}).get("limit", [])),
             }
         )
         timestamp += bucket_delta
 
-    return pl.DataFrame(result).with_columns(
-        pl.col("timestamp").cast(pl.Datetime(time_zone="UTC"))
-    )
+    # Do not rely on Polars' default schema inference here.  The first
+    # 100 buckets can contain only nulls (or whole-number-looking values) for
+    # a metric, while a later bucket may contain a float such as 96.0.  That
+    # causes a runtime error when Polars tries to append the later value to
+    # a column inferred as Int64.  Reuse the canonical schema from the empty
+    # frame so every bucket has stable dtypes, including all-null series.
+    # Build columns independently with explicit dtypes.  Some supported
+    # Polars versions still attempt row-wise inference for dict records even
+    # when a schema is supplied, which can fail when an early value is null
+    # or integral and a later value is a float (for example 96.0).
+    schema = _empty_frame().schema
+    return pl.DataFrame({
+        name: pl.Series(
+            name,
+            [row.get(name) for row in result],
+            dtype=dtype,
+            strict=False,
+        )
+        for name, dtype in schema.items()
+    })

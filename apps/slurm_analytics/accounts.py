@@ -18,6 +18,10 @@ SORT_COLUMNS = {
     "memory_gb_hours": "memory_gb_hours",
     "gpu_memory_gb": "gpu_memory_gb",
     "elapsed_hours": "elapsed_hours",
+    "tasks": "total_tasks",
+    "total_tasks": "total_tasks",
+    "disk_read_gib": "disk_read_gib",
+    "disk_write_gib": "disk_write_gib",
 }
 
 
@@ -59,6 +63,22 @@ def _usage_sql(table, name_column, clauses):
             ELSE COALESCE(TRY_CAST(nnodes AS DOUBLE), 0)
           END
     )"""
+    schema_con = connect()
+    try:
+        available_columns = {row[0].lower() for row in schema_con.execute("DESCRIBE jobs").fetchall()}
+    finally:
+        schema_con.close()
+
+    def disk_gib(column):
+        if column.lower() not in available_columns:
+            return "NULL::DOUBLE"
+        value = "TRY_CAST(regexp_extract(upper(CAST({0} AS VARCHAR)), '^([0-9]+(?:\\.[0-9]+)?)[ ]*([KMGTPE]?)', 1) AS DOUBLE)".format(column)
+        unit = "regexp_extract(upper(CAST({0} AS VARCHAR)), '^([0-9]+(?:\\.[0-9]+)?)[ ]*([KMGTPE]?)', 2)".format(column)
+        return "(({value}) * CASE {unit} WHEN 'K' THEN 1.0/1048576.0 WHEN 'M' THEN 1.0/1024.0 WHEN 'G' THEN 1.0 WHEN 'T' THEN 1024.0 WHEN 'P' THEN 1048576.0 WHEN 'E' THEN 1073741824.0 ELSE 1.0/1073741824.0 END)".format(value=value, unit=unit)
+
+    read_gib = disk_gib("maxdiskread")
+    write_gib = disk_gib("maxdiskwrite")
+    tasks_expr = "TRY_CAST(ntasks AS DOUBLE)" if "ntasks" in available_columns else "NULL::DOUBLE"
     return """
         SELECT {name_column} AS name,
                COUNT(*) AS jobs,
@@ -67,11 +87,14 @@ def _usage_sql(table, name_column, clauses):
                SUM(COALESCE(TRY_CAST(gpu_count AS DOUBLE), 0) * COALESCE(TRY_CAST(elapsed_seconds AS DOUBLE), 0)) / 3600.0 AS gpu_hours,
                SUM(({memory_bytes} / 1073741824.0) * COALESCE(TRY_CAST(elapsed_seconds AS DOUBLE), 0)) / 3600.0 AS memory_gb_hours,
                MAX(COALESCE(TRY_CAST(gpu_mem_max_bytes AS DOUBLE), 0)) / 1073741824.0 AS gpu_memory_gb,
-               SUM(COALESCE(TRY_CAST(elapsed_seconds AS DOUBLE), 0)) / 3600.0 AS elapsed_hours
+               SUM(COALESCE(TRY_CAST(elapsed_seconds AS DOUBLE), 0)) / 3600.0 AS elapsed_hours,
+               SUM(COALESCE({tasks_expr}, 0)) AS total_tasks,
+               SUM(COALESCE({read_gib}, 0.0)) AS disk_read_gib,
+               SUM(COALESCE({write_gib}, 0.0)) AS disk_write_gib
         FROM {table}
         WHERE {where}
         GROUP BY {name_column}
-    """.format(name_column=name_column, table=table, where=where, memory_bytes=memory_bytes)
+    """.format(name_column=name_column, table=table, where=where, memory_bytes=memory_bytes, read_gib=read_gib, write_gib=write_gib, tasks_expr=tasks_expr)
 
 
 def _round_metrics(records):
@@ -79,6 +102,7 @@ def _round_metrics(records):
     metrics = (
         "allocated_nodes", "cpu_hours", "gpu_hours",
         "memory_gb_hours", "gpu_memory_gb", "elapsed_hours",
+        "total_tasks", "disk_read_gib", "disk_write_gib",
     )
     for record in records:
         for key in metrics:
@@ -129,13 +153,17 @@ def account_usage(start=None, end=None, account=None, limit=100, sort="cpu_hours
                        COALESCE(u.gpu_hours, 0.0) AS gpu_hours,
                        COALESCE(u.memory_gb_hours, 0.0) AS memory_gb_hours,
                        COALESCE(u.gpu_memory_gb, 0.0) AS gpu_memory_gb,
-                       COALESCE(u.elapsed_hours, 0.0) AS elapsed_hours
+                       COALESCE(u.elapsed_hours, 0.0) AS elapsed_hours,
+                       COALESCE(u.total_tasks, 0.0) AS total_tasks,
+                       COALESCE(u.disk_read_gib, 0.0) AS disk_read_gib,
+                       COALESCE(u.disk_write_gib, 0.0) AS disk_write_gib
                 FROM current_accounts ca
                 LEFT JOIN usage u ON u.name = ca.account
                 UNION ALL
                 SELECT u.name AS account, NULL AS parent, 0 AS level, u.name AS path,
                        u.jobs, u.allocated_nodes, u.cpu_hours, u.gpu_hours,
-                       u.memory_gb_hours, u.gpu_memory_gb, u.elapsed_hours
+                       u.memory_gb_hours, u.gpu_memory_gb, u.elapsed_hours,
+                       u.total_tasks, u.disk_read_gib, u.disk_write_gib
                 FROM usage u
                 WHERE u.name = 'Unknown'
                   AND NOT EXISTS (SELECT 1 FROM accounts WHERE account_name = 'Unknown')
@@ -154,7 +182,7 @@ def account_usage(start=None, end=None, account=None, limit=100, sort="cpu_hours
         final_params.append(limit)
         result = fetch_polars(con, sql, final_params)
         if round_metrics:
-            result = result.with_columns([pl.col(c).round(2) for c in ("allocated_nodes", "cpu_hours", "gpu_hours", "memory_gb_hours", "gpu_memory_gb", "elapsed_hours") if c in result.columns])
+            result = result.with_columns([pl.col(c).round(2) for c in ("allocated_nodes", "cpu_hours", "gpu_hours", "memory_gb_hours", "gpu_memory_gb", "elapsed_hours", "total_tasks", "disk_read_gib", "disk_write_gib") if c in result.columns])
         return result
     finally:
         con.close()
@@ -192,7 +220,10 @@ def user_usage(start=None, end=None, user=None, account=None, limit=100, sort="c
                    COALESCE(u.gpu_hours, 0.0) AS gpu_hours,
                    COALESCE(u.memory_gb_hours, 0.0) AS memory_gb_hours,
                    COALESCE(u.gpu_memory_gb, 0.0) AS gpu_memory_gb,
-                   COALESCE(u.elapsed_hours, 0.0) AS elapsed_hours
+                   COALESCE(u.elapsed_hours, 0.0) AS elapsed_hours,
+                   COALESCE(u.total_tasks, 0.0) AS total_tasks,
+                   COALESCE(u.disk_read_gib, 0.0) AS disk_read_gib,
+                   COALESCE(u.disk_write_gib, 0.0) AS disk_write_gib
             FROM current_users cu
             LEFT JOIN usage u ON u.name = cu.user
             WHERE {user_filter}
@@ -213,7 +244,7 @@ def user_usage(start=None, end=None, user=None, account=None, limit=100, sort="c
         final_params.append(limit)
         result = fetch_polars(con, sql, final_params)
         if round_metrics:
-            result = result.with_columns([pl.col(c).round(2) for c in ("allocated_nodes", "cpu_hours", "gpu_hours", "memory_gb_hours", "gpu_memory_gb", "elapsed_hours") if c in result.columns])
+            result = result.with_columns([pl.col(c).round(2) for c in ("allocated_nodes", "cpu_hours", "gpu_hours", "memory_gb_hours", "gpu_memory_gb", "elapsed_hours", "total_tasks", "disk_read_gib", "disk_write_gib") if c in result.columns])
         return result
     finally:
         con.close()
@@ -231,6 +262,7 @@ def account_tree(start=None, end=None, sort="name", direction="asc"):
                 "jobs": 0, "allocated_nodes": 0.0, "cpu_hours": 0.0,
                 "gpu_hours": 0.0, "memory_gb_hours": 0.0,
                 "gpu_memory_gb": 0.0, "elapsed_hours": 0.0,
+                "total_tasks": 0.0, "disk_read_gib": 0.0, "disk_write_gib": 0.0,
             }
             for name, parent, level, path in rows
             if name
@@ -242,6 +274,7 @@ def account_tree(start=None, end=None, sort="name", direction="asc"):
                     "jobs": 0, "allocated_nodes": 0.0, "cpu_hours": 0.0,
                     "gpu_hours": 0.0, "memory_gb_hours": 0.0,
                     "gpu_memory_gb": 0.0, "elapsed_hours": 0.0,
+                    "total_tasks": 0.0, "disk_read_gib": 0.0, "disk_write_gib": 0.0,
                 }
             elif name not in result:
                 result[name] = {
@@ -249,35 +282,40 @@ def account_tree(start=None, end=None, sort="name", direction="asc"):
                     "jobs": 0, "allocated_nodes": 0.0, "cpu_hours": 0.0,
                     "gpu_hours": 0.0, "memory_gb_hours": 0.0,
                     "gpu_memory_gb": 0.0, "elapsed_hours": 0.0,
+                    "total_tasks": 0.0, "disk_read_gib": 0.0, "disk_write_gib": 0.0,
                 }
             result[name].update(values)
 
-        parents = {name: parent for name, parent, _, _ in rows}
+        # Roll each node into its immediate parent, deepest accounts first.
+        # Ancestors then propagate their already-combined totals once, avoiding
+        # double counting when the hierarchy has three or more levels.
         metrics = (
             "jobs", "allocated_nodes", "cpu_hours", "gpu_hours",
             "memory_gb_hours", "gpu_memory_gb", "elapsed_hours",
+            "total_tasks", "disk_read_gib", "disk_write_gib",
         )
-        for name, values in list(result.items()):
+        parents = {name: parent for name, parent, _, _ in rows}
+        depth_by_name = {name: int(level or 0) for name, parent, level, path in rows}
+        ordered_names = sorted(
+            [name for name in result if name in parents],
+            key=lambda name: depth_by_name.get(name, 0),
+            reverse=True,
+        )
+        for name in ordered_names:
             parent = parents.get(name)
-            seen = set()
-            while parent and parent not in seen:
-                seen.add(parent)
-                if parent not in result:
-                    result[parent] = {
-                        "account": parent, "parent": parents.get(parent), "level": 0,
-                        "path": parent, "jobs": 0, "allocated_nodes": 0.0,
-                        "cpu_hours": 0.0, "gpu_hours": 0.0,
-                        "memory_gb_hours": 0.0, "gpu_memory_gb": 0.0,
-                        "elapsed_hours": 0.0,
-                    }
-                for key in metrics:
-                    # GPU memory is a peak metric; adding child peaks would be
-                    # misleading, so keep the largest observed value.
-                    if key == "gpu_memory_gb":
-                        result[parent][key] = max(result[parent][key], values.get(key, 0) or 0)
-                    else:
-                        result[parent][key] += values.get(key, 0) or 0
-                parent = parents.get(parent)
+            if not parent or parent not in result:
+                continue
+            values = result[name]
+            for key in metrics:
+                # GPU memory is a peak metric, not an additive usage total.
+                if key == "gpu_memory_gb":
+                    result[parent][key] = max(
+                        result[parent].get(key, 0) or 0,
+                        values.get(key, 0) or 0,
+                    )
+                else:
+                    result[parent][key] += values.get(key, 0) or 0
+
         values = list(result.values())
         key_map = {
             "name": lambda r: r.get("path") or r.get("account") or "",

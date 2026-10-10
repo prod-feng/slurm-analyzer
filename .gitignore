@@ -10,6 +10,7 @@ mytest*
 *.bad*
 nohup.out
 *.yaml
+*json
 apps/data/slurm.duckdb
 refresh_slurm_data.log
 .slurm_snapshot.pkl

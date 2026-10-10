@@ -3,6 +3,7 @@
 from __future__ import absolute_import
 
 from django.http import JsonResponse
+import polars as pl
 from django.views.decorators.http import require_GET, require_POST
 
 from slurm_analytics.sacct import SacctConfig
@@ -147,6 +148,148 @@ def api_summary(request):
     except Exception as exc:
         return JsonResponse({"error": "Unable to calculate period summary: {}".format(exc)}, status=500)
 
+    # Peak values are calculated over terminal jobs started in the selected range.
+    # Null telemetry remains null so missing measurements are never shown as zero.
+    try:
+        from slurm_analytics.storage import connect
+        schema_con = connect()
+        try:
+            available_job_columns = {r[0].lower() for r in schema_con.execute("DESCRIBE jobs").fetchall()}
+        finally:
+            schema_con.close()
+        ntasks_expr = "TRY_CAST(tj.ntasks AS DOUBLE)" if "ntasks" in available_job_columns else "NULL::DOUBLE"
+        reqmem_bytes_expr = """TRY_CAST(regexp_extract(upper(CAST(tj.reqmem AS VARCHAR)), '^([0-9]+(?:\\.[0-9]+)?)[ ]*([KMGTPE]?)', 1) AS DOUBLE)
+            * CASE regexp_extract(upper(CAST(tj.reqmem AS VARCHAR)), '^([0-9]+(?:\\.[0-9]+)?)[ ]*([KMGTPE]?)', 2)
+                WHEN 'K' THEN 1024.0 WHEN 'M' THEN 1048576.0 WHEN 'G' THEN 1073741824.0
+                WHEN 'T' THEN 1099511627776.0 WHEN 'P' THEN 1125899906842624.0
+                WHEN 'E' THEN 1152921504606846976.0 ELSE 1.0 END
+            * CASE lower(regexp_extract(upper(CAST(tj.reqmem AS VARCHAR)), '([CN])$', 1))
+                WHEN 'C' THEN COALESCE(TRY_CAST(tj.ncpus AS DOUBLE), 0)
+                ELSE COALESCE(TRY_CAST(tj.nnodes AS DOUBLE), 0) END"""
+        if "allocated_memory_bytes" in available_job_columns:
+            requested_memory_expr = "COALESCE(MAX(TRY_CAST(tj.allocated_memory_bytes AS DOUBLE)), MAX({})) / 1073741824.0 AS max_requested_memory_gib".format(reqmem_bytes_expr)
+        else:
+            requested_memory_expr = "MAX({}) / 1073741824.0 AS max_requested_memory_gib".format(reqmem_bytes_expr)
+        peaks = query_df(
+            """
+            WITH terminal_jobs AS (
+                SELECT * FROM jobs
+                WHERE TRY_CAST(start_time AS TIMESTAMPTZ) >= TRY_CAST(? AS TIMESTAMPTZ)
+                  AND TRY_CAST(start_time AS TIMESTAMPTZ) < TRY_CAST(? AS TIMESTAMPTZ)
+                  AND lower(COALESCE(state_category, '')) NOT IN ('running', 'pending')
+            ), step_rss AS (
+                SELECT js.canonical_job_id,
+                       MAX(
+                           TRY_CAST(regexp_extract(upper(CAST(js.maxrss AS VARCHAR)), '^([0-9]+(?:\\.[0-9]+)?)[ ]*([KMGTPE]?)', 1) AS DOUBLE)
+                           * CASE regexp_extract(upper(CAST(js.maxrss AS VARCHAR)), '^([0-9]+(?:\\.[0-9]+)?)[ ]*([KMGTPE]?)', 2)
+                               WHEN 'K' THEN 1024.0 WHEN 'M' THEN 1048576.0 WHEN 'G' THEN 1073741824.0
+                               WHEN 'T' THEN 1099511627776.0 WHEN 'P' THEN 1125899906842624.0
+                               WHEN 'E' THEN 1152921504606846976.0 ELSE 1.0 END
+                       ) AS max_rss_bytes
+                FROM job_steps js JOIN terminal_jobs tj ON tj.canonical_job_id = js.canonical_job_id
+                WHERE js.maxrss IS NOT NULL
+                GROUP BY js.canonical_job_id
+            )
+            SELECT
+                MAX(TRY_CAST(tj.ncpus AS DOUBLE)) AS max_cpus_per_job,
+                MAX(TRY_CAST(tj.gpu_count AS DOUBLE)) AS max_gpus_per_job,
+                {requested_memory_expr},
+                MAX(TRY_CAST(tj.nnodes AS DOUBLE)) AS max_nodes_per_job,
+                AVG(TRY_CAST(tj.nnodes AS DOUBLE)) AS avg_nodes_per_job,
+                MAX({ntasks_expr}) AS max_tasks_per_job,
+                AVG({ntasks_expr}) AS avg_tasks_per_job,
+                MAX(COALESCE(sr.max_rss_bytes,
+                    TRY_CAST(regexp_extract(upper(CAST(tj.maxrss AS VARCHAR)), '^([0-9]+(?:\\.[0-9]+)?)[ ]*([KMGTPE]?)', 1) AS DOUBLE)
+                    * CASE regexp_extract(upper(CAST(tj.maxrss AS VARCHAR)), '^([0-9]+(?:\\.[0-9]+)?)[ ]*([KMGTPE]?)', 2)
+                        WHEN 'K' THEN 1024.0 WHEN 'M' THEN 1048576.0 WHEN 'G' THEN 1073741824.0
+                        WHEN 'T' THEN 1099511627776.0 WHEN 'P' THEN 1125899906842624.0
+                        WHEN 'E' THEN 1152921504606846976.0 ELSE 1.0 END
+                )) / 1073741824.0 AS max_recorded_rss_gib,
+                MAX(TRY_CAST(tj.time_limit_seconds AS DOUBLE)) / 3600.0 AS max_time_limit_hours,
+                MAX(TRY_CAST(tj.elapsed_seconds AS DOUBLE)) / 3600.0 AS max_elapsed_runtime_hours,
+                MAX(TRY_CAST(tj.gpu_mem_max_bytes AS DOUBLE)) / 1073741824.0 AS max_recorded_gpu_memory_gib
+            FROM terminal_jobs tj LEFT JOIN step_rss sr ON sr.canonical_job_id = tj.canonical_job_id
+            """.format(ntasks_expr=ntasks_expr, requested_memory_expr=requested_memory_expr),
+            [start, end],
+        )
+        peak_row = peaks.to_dicts()[0] if not peaks.is_empty() else {}
+        # Recompute peak MaxRSS from raw step values with a tolerant parser;
+        # this also covers DuckDB builds whose regexp engine does not parse
+        # decimal/unit suffixes consistently.
+        import re
+        rss_rows = query_df(
+            """
+            SELECT js.maxrss
+            FROM job_steps js JOIN jobs j ON j.canonical_job_id = js.canonical_job_id
+            WHERE TRY_CAST(j.start_time AS TIMESTAMPTZ) >= TRY_CAST(? AS TIMESTAMPTZ)
+              AND TRY_CAST(j.start_time AS TIMESTAMPTZ) < TRY_CAST(? AS TIMESTAMPTZ)
+              AND lower(COALESCE(j.state_category, '')) NOT IN ('running', 'pending')
+              AND js.maxrss IS NOT NULL
+            """,
+            [start, end],
+        )
+        rss_bytes = []
+        for item in rss_rows.get_column("maxrss").to_list() if not rss_rows.is_empty() else []:
+            match = re.match(r"^\s*([0-9]+(?:\.[0-9]+)?)\s*([KMGTPE]?)\s*[cCnN]?\s*$", str(item), re.I)
+            if match:
+                powers = {"": 0, "K": 1, "M": 2, "G": 3, "T": 4, "P": 5, "E": 6}
+                rss_bytes.append(float(match.group(1)) * (1024.0 ** powers[match.group(2).upper()]))
+        if rss_bytes:
+            peak_row["max_recorded_rss_gib"] = max(rss_bytes) / (1024.0 ** 3)
+    except Exception:
+        peak_row = {}
+
+    # Prefer sacct MaxDiskRead/MaxDiskWrite telemetry. Older databases may not
+    # have these columns until a refresh ingests the expanded sacct field list.
+    try:
+        import re
+        con = None
+        from slurm_analytics.storage import connect
+        con = connect()
+        job_columns = {r[0].lower() for r in con.execute("DESCRIBE jobs").fetchall()}
+        con.close()
+        if {"maxdiskread", "maxdiskwrite"} & job_columns:
+            read_col = "maxdiskread" if "maxdiskread" in job_columns else "NULL AS maxdiskread"
+            write_col = "maxdiskwrite" if "maxdiskwrite" in job_columns else "NULL AS maxdiskwrite"
+            io_rows = query_df(
+                """
+                SELECT {read_col}, {write_col} FROM jobs
+                WHERE TRY_CAST(start_time AS TIMESTAMPTZ) >= TRY_CAST(? AS TIMESTAMPTZ)
+                  AND TRY_CAST(start_time AS TIMESTAMPTZ) < TRY_CAST(? AS TIMESTAMPTZ)
+                  AND lower(COALESCE(state_category, '')) NOT IN ('running', 'pending')
+                """.format(read_col=read_col, write_col=write_col),
+                [start, end],
+            )
+            def disk_bytes(value):
+                if value is None:
+                    return None
+                match = re.match(r"^\s*([0-9]+(?:\.[0-9]+)?)\s*([KMGTPE]?)\s*$", str(value), re.I)
+                if not match:
+                    return None
+                power = {"": 0, "K": 1, "M": 2, "G": 3, "T": 4, "P": 5, "E": 6}[match.group(2).upper()]
+                return float(match.group(1)) * (1024.0 ** power)
+            read_values, write_values, io_values = [], [], []
+            for item in io_rows.to_dicts() if not io_rows.is_empty() else []:
+                read_bytes = disk_bytes(item.get("maxdiskread"))
+                write_bytes = disk_bytes(item.get("maxdiskwrite"))
+                if read_bytes is not None:
+                    read_values.append(read_bytes / (1024.0 ** 3))
+                if write_bytes is not None:
+                    write_values.append(write_bytes / (1024.0 ** 3))
+                if read_bytes is not None or write_bytes is not None:
+                    io_values.append(((read_bytes or 0.0) + (write_bytes or 0.0)) / (1024.0 ** 3))
+            peak_row["max_disk_read_gib"] = max(read_values) if read_values else None
+            peak_row["max_disk_write_gib"] = max(write_values) if write_values else None
+            peak_row["max_disk_io_gib"] = max(io_values) if io_values else None
+        else:
+            peak_row["max_disk_read_gib"] = None
+            peak_row["max_disk_write_gib"] = None
+            peak_row["max_disk_io_gib"] = None
+    except Exception:
+        peak_row["max_disk_read_gib"] = None
+        peak_row["max_disk_write_gib"] = None
+        peak_row["max_disk_io_gib"] = None
+
     # Running and pending are current queue states, sourced live from squeue.
     try:
         queue = fetch_squeue()
@@ -168,6 +311,20 @@ def api_summary(request):
         "pending_count": pending_count,
         "cpu_hours": float(row.get("cpu_hours") or 0),
         "gpu_hours": float(row.get("gpu_hours") or 0),
+        "max_cpus_per_job": peak_row.get("max_cpus_per_job"),
+        "max_gpus_per_job": peak_row.get("max_gpus_per_job"),
+        "max_requested_memory_gib": peak_row.get("max_requested_memory_gib"),
+        "max_nodes_per_job": peak_row.get("max_nodes_per_job"),
+        "avg_nodes_per_job": peak_row.get("avg_nodes_per_job"),
+        "max_tasks_per_job": peak_row.get("max_tasks_per_job"),
+        "avg_tasks_per_job": peak_row.get("avg_tasks_per_job"),
+        "max_recorded_rss_gib": peak_row.get("max_recorded_rss_gib"),
+        "max_time_limit_hours": peak_row.get("max_time_limit_hours"),
+        "max_elapsed_runtime_hours": peak_row.get("max_elapsed_runtime_hours"),
+        "max_recorded_gpu_memory_gib": peak_row.get("max_recorded_gpu_memory_gib"),
+        "max_disk_io_gib": peak_row.get("max_disk_io_gib"),
+        "max_disk_read_gib": peak_row.get("max_disk_read_gib"),
+        "max_disk_write_gib": peak_row.get("max_disk_write_gib"),
         "start": start,
         "end": end,
     })
@@ -186,6 +343,70 @@ def api_partitions(request):
     if response:
         return response
     return JsonResponse(dataframe_to_records(snapshot.analytics["partitions"]), safe=False)
+
+
+@require_GET
+def api_partition_usage(request):
+    """Aggregate terminal-job CPU/GPU usage by partition over a date range."""
+    snapshot, response = _snapshot_or_response()
+    if response:
+        return response
+    from datetime import datetime, timedelta, timezone
+    now = datetime.now(timezone.utc)
+    start = request.GET.get("start") or (now - timedelta(days=7)).isoformat()
+    end = request.GET.get("end") or now.isoformat()
+    try:
+        con = None
+        from slurm_analytics.storage import connect
+        con = connect()
+        cols = {r[0].lower() for r in con.execute("DESCRIBE jobs").fetchall()}
+        con.close()
+        ntasks_expr = "TRY_CAST(ntasks AS DOUBLE)" if "ntasks" in cols else "NULL::DOUBLE"
+        allocated_memory_expr = "TRY_CAST(allocated_memory_bytes AS DOUBLE)" if "allocated_memory_bytes" in cols else "NULL::DOUBLE"
+        def disk_gib_expr(column):
+            if column not in cols:
+                return "NULL::DOUBLE"
+            value = "TRY_CAST(regexp_extract(upper(CAST({0} AS VARCHAR)), '^([0-9]+(?:\\.[0-9]+)?)[ ]*([KMGTPE]?)', 1) AS DOUBLE)".format(column)
+            unit = "regexp_extract(upper(CAST({0} AS VARCHAR)), '^([0-9]+(?:\\.[0-9]+)?)[ ]*([KMGTPE]?)', 2)".format(column)
+            return "(({value}) * CASE {unit} WHEN 'K' THEN 1.0/1048576.0 WHEN 'M' THEN 1.0/1024.0 WHEN 'G' THEN 1.0 WHEN 'T' THEN 1024.0 WHEN 'P' THEN 1048576.0 WHEN 'E' THEN 1073741824.0 ELSE 1.0/1073741824.0 END)".format(value=value, unit=unit)
+        disk_read_expr, disk_write_expr = disk_gib_expr("maxdiskread"), disk_gib_expr("maxdiskwrite")
+        query = query_df(
+            """
+            WITH base_jobs AS (
+                SELECT *,
+                       COALESCE(NULLIF(TRIM(partition), ''), '(Unknown partition)') AS partition_list
+                FROM jobs
+                WHERE TRY_CAST(start_time AS TIMESTAMPTZ) >= TRY_CAST(? AS TIMESTAMPTZ)
+                  AND TRY_CAST(start_time AS TIMESTAMPTZ) < TRY_CAST(? AS TIMESTAMPTZ)
+                  AND lower(COALESCE(state_category, '')) NOT IN ('running', 'pending')
+            ), split_jobs AS (
+                SELECT b.*,
+                       TRIM(p.partition_name) AS partition_name,
+                       GREATEST(array_length(string_split(b.partition_list, ',')), 1) AS partition_choices
+                FROM base_jobs b
+                CROSS JOIN UNNEST(string_split(b.partition_list, ',')) AS p(partition_name)
+            )
+            SELECT partition_name AS partition,
+                   COUNT(DISTINCT canonical_job_id) AS jobs,
+                   SUM((COALESCE(TRY_CAST(ncpus AS DOUBLE), 0) * COALESCE(TRY_CAST(elapsed_seconds AS DOUBLE), 0) / 3600.0) / partition_choices) AS cpu_hours,
+                   SUM((COALESCE(TRY_CAST(gpu_count AS DOUBLE), 0) * COALESCE(TRY_CAST(elapsed_seconds AS DOUBLE), 0) / 3600.0) / partition_choices) AS gpu_hours,
+                   SUM((COALESCE({allocated_memory_expr}, 0) / 1073741824.0 * COALESCE(TRY_CAST(elapsed_seconds AS DOUBLE), 0) / 3600.0) / partition_choices) AS memory_gb_hours,
+                   SUM(COALESCE({ntasks}, 0) / partition_choices) AS total_tasks,
+                   SUM(COALESCE({disk_read_expr}, 0) / partition_choices) AS disk_read_gib,
+                   SUM(COALESCE({disk_write_expr}, 0) / partition_choices) AS disk_write_gib,
+                   AVG(TRY_CAST(nnodes AS DOUBLE)) AS avg_nodes_per_job,
+                   MAX(TRY_CAST(nnodes AS DOUBLE)) AS max_nodes_per_job,
+                   AVG({ntasks}) AS avg_tasks_per_job,
+                   MAX({ntasks}) AS max_tasks_per_job
+            FROM split_jobs
+            WHERE partition_name <> ''
+            GROUP BY partition_name
+            ORDER BY cpu_hours DESC
+            """.format(ntasks=ntasks_expr, allocated_memory_expr=allocated_memory_expr, disk_read_expr=disk_read_expr, disk_write_expr=disk_write_expr), [start, end],
+        )
+        return JsonResponse(dataframe_to_records(query), safe=False)
+    except Exception as exc:
+        return JsonResponse({"error": str(exc)}, status=500)
 
 
 @require_GET
@@ -261,18 +482,78 @@ def api_timeseries(request):
             historical_jobs = query_df(
                 """
                 SELECT
-                    CAST(start_time AS VARCHAR) AS start_time,
-                    CAST(end_time AS VARCHAR) AS end_time,
-                    state_category,
-                    ncpus,
-                    gpu_count
-                FROM jobs
-                WHERE start_time IS NOT NULL
-                  AND start_time < ?
-                  AND (end_time IS NULL OR end_time > ?)
+                    CAST(j.canonical_job_id AS VARCHAR) AS canonical_job_id,
+                    CAST(j.submit_time AS VARCHAR) AS submit_time,
+                    CAST(j.start_time AS VARCHAR) AS start_time,
+                    CAST(j.end_time AS VARCHAR) AS end_time,
+                    CAST(j.maxrss AS VARCHAR) AS job_maxrss,
+                    j.state_category,
+                    j.ncpus,
+                    j.gpu_count,
+                    j.allocated_memory_bytes,
+                    NULL::DOUBLE AS max_rss_bytes,
+                    j.elapsed_seconds,
+                    j.time_limit_seconds
+                FROM jobs j
+                WHERE (
+                    j.start_time IS NOT NULL
+                    AND j.start_time < ?
+                    AND (j.end_time IS NULL OR j.end_time > ?)
+                ) OR (
+                    j.submit_time >= TRY_CAST(? AS TIMESTAMPTZ)
+                    AND j.submit_time < TRY_CAST(? AS TIMESTAMPTZ)
+                )
                 """,
-                [requested_end, requested_start],
+                [requested_end, requested_start, requested_start, requested_end],
+                schema={
+                    "canonical_job_id": pl.String,
+                    "submit_time": pl.String,
+                    "start_time": pl.String,
+                    "end_time": pl.String,
+                    "job_maxrss": pl.String,
+                    "state_category": pl.String,
+                    "ncpus": pl.Float64,
+                    "gpu_count": pl.Float64,
+                    "allocated_memory_bytes": pl.Float64,
+                    "max_rss_bytes": pl.Float64,
+                    "elapsed_seconds": pl.Float64,
+                    "time_limit_seconds": pl.Float64,
+                },
             )
+            # Parse MaxRSS values from job-step rows in Python instead of relying
+            # on SQL regexp behavior, which varies across DuckDB versions and
+            # can silently yield NULL for otherwise valid sacct values.
+            import re
+            step_rows = query_df(
+                "SELECT canonical_job_id, maxrss FROM job_steps WHERE maxrss IS NOT NULL",
+                [],
+            )
+            def parse_rss_bytes(value):
+                if value is None:
+                    return None
+                match = re.match(r"^\s*([0-9]+(?:\.[0-9]+)?)\s*([KMGTPE]?)\s*[cCnN]?\s*$", str(value), re.I)
+                if not match:
+                    return None
+                powers = {"": 0, "K": 1, "M": 2, "G": 3, "T": 4, "P": 5, "E": 6}
+                return float(match.group(1)) * (1024.0 ** powers[match.group(2).upper()])
+            rss_by_job = {}
+            for step in step_rows.to_dicts() if not step_rows.is_empty() else []:
+                rss = parse_rss_bytes(step.get("maxrss"))
+                if rss is not None:
+                    key = str(step.get("canonical_job_id") or "")
+                    if key:
+                        rss_by_job[key] = max(rss_by_job.get(key, 0.0), rss)
+            if "canonical_job_id" in historical_jobs.columns:
+                rss_values = [
+                    rss_by_job.get(str(job_id or "")) or parse_rss_bytes(raw_rss)
+                    for job_id, raw_rss in zip(
+                        historical_jobs.get_column("canonical_job_id").to_list(),
+                        historical_jobs.get_column("job_maxrss").to_list(),
+                    )
+                ]
+                historical_jobs = historical_jobs.with_columns(
+                    pl.Series("max_rss_bytes", rss_values, dtype=pl.Float64, strict=False)
+                )
             result = time_series(
                 historical_jobs,
                 start=requested_start,

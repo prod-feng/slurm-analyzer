@@ -12,15 +12,17 @@ from pathlib import Path
 
 SACCT = "/cm/shared/apps/slurm/current/bin/sacct"
 
+
+# See apps/slurm_analytics/sacct.py, SACCT_FIELDS. Need to be the same.
 FIELDS = [
     "jobid", "jobidraw", "cluster", "partition", "qos",
     "account", "group", "gid", "user", "uid",
     "submit", "eligible", "start", "end", "elapsed",
-    "exitcode", "state", "nnodes", "ncpus", "reqcpus",
+    "exitcode", "state", "nnodes", "ntasks", "ncpus", "reqcpus",
     "reqmem", "reqtres", "alloctres", "timelimit",
     "nodelist", "jobname", "tresusageintot",
     "tresusageinave", "tresusageinmax", "avecpu",
-    "totalcpu", "maxrss", "maxvmsize",
+    "totalcpu", "maxrss", "maxvmsize","MaxDiskRead","MaxDiskWrite",
 ]
 
 

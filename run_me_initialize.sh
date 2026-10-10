@@ -42,10 +42,12 @@ start() {
     echo "Source:    $SOURCE"
     echo "Container: $IMAGE"
     echo "Log:       $LOGFILE"
- 
+
     singularity exec \
     --env "PATH=/cm/shared/apps/slurm/current/bin:${PATH}" \
     --bind "${SOURCE}:/workspace" \
+    --bind /usr/lib64/libreadline.so.7:/lib/x86_64-linux-gnu/libreadline.so.7:ro \
+    --bind /usr//lib64/libhistory.so.7:/lib/x86_64-linux-gnu/libhistory.so.7:ro \
     --bind /etc/nsswitch.conf:/etc/nsswitch.conf:ro \
     --bind /run/nslcd:/run/nslcd:ro \
     --bind /usr/lib64/libmunge.so.2:/usr/lib64/libmunge.so.2:ro \
@@ -55,7 +57,9 @@ start() {
     --bind /run/munge:/run/munge \
     "${IMAGE}" \
     python /workspace/manage.py initialize_slurm \
-    --start 2025-05-01T00:00:00 --end 2026-10-07T00:00:00
+    --history-file /workspace/rawdata/20260501T000000_20260601T000000.out\
+    --start 2026-05-01T00:00:00
+    #    --start 2026-05-01T00:00:00 --end 2026-05-07T00:00:00 --chunk-days 3 --timeout 1800
 
 
     # Give the process a moment to start and verify it is alive.

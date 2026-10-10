@@ -232,9 +232,29 @@ def replace_accounts(accounts, associations, path=None):
         con.close()
 
 
-def query_df(sql, params=None, path=None):
+def query_df(sql, params=None, path=None, schema=None):
+    """Execute a query and return a Polars frame.
+
+    When ``schema`` is supplied, build each column with an explicit dtype.
+    This avoids row-wise type inference failures on mixed/null-heavy query
+    results while leaving the default DuckDB conversion unchanged elsewhere.
+    """
     con = connect(path)
     try:
-        return fetch_polars(con, sql, params)
+        if schema is None:
+            return fetch_polars(con, sql, params)
+
+        result = con.execute(sql, params or [])
+        columns = [desc[0] for desc in (result.description or [])]
+        rows = result.fetchall()
+        return pl.DataFrame({
+            name: pl.Series(
+                name,
+                [row[index] for row in rows],
+                dtype=schema[name],
+                strict=False,
+            )
+            for index, name in enumerate(columns)
+        })
     finally:
         con.close()

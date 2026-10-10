@@ -29,6 +29,7 @@ SACCT_FIELDS = [
     "exitcode",
     "state",
     "nnodes",
+    "ntasks",
     "ncpus",
     "reqcpus",
     "reqmem",
@@ -44,6 +45,8 @@ SACCT_FIELDS = [
     "totalcpu",
     "maxrss",
     "maxvmsize",
+    "maxdiskread",
+    "maxdiskwrite",
 ]
 
 

@@ -11,6 +11,7 @@ from .parser import (
     parse_job_id,
     parse_memory_allocation,
     parse_slurm_duration,
+    parse_slurm_memory,
 )
 
 
@@ -427,6 +428,7 @@ def prepare_steps(steps):
         "state",
         "state_category",
         "nnodes",
+        "ntasks",
         "ncpus",
         "reqcpus",
         "alloctres",
@@ -439,6 +441,8 @@ def prepare_steps(steps):
         "totalcpu",
         "maxrss",
         "maxvmsize",
+        "maxdiskread",
+        "maxdiskwrite",
         "gpu_count",
         "gpu_util",
         "gpu_mem_bytes",
@@ -493,6 +497,9 @@ def consolidate_jobs(jobs, steps):
                 pl.lit(None, dtype=pl.Int64)
                 .alias("gpu_mem_max_bytes"),
 
+                pl.lit(None, dtype=pl.Int64)
+                .alias("max_rss_bytes"),
+
                 pl.lit(0, dtype=pl.Int64)
                 .alias("workload_step_count"),
 
@@ -504,6 +511,17 @@ def consolidate_jobs(jobs, steps):
     if "is_workload_step" not in steps.columns:
         steps = add_step_flags(
             steps
+        )
+
+    if "maxrss" in steps.columns:
+        steps = steps.with_columns(
+            pl.col("maxrss")
+            .map_elements(parse_slurm_memory, return_dtype=pl.Int64)
+            .alias("_max_rss_bytes")
+        )
+    else:
+        steps = steps.with_columns(
+            pl.lit(None, dtype=pl.Int64).alias("_max_rss_bytes")
         )
 
     step_summary = (
@@ -522,6 +540,10 @@ def consolidate_jobs(jobs, steps):
                 pl.col("gpu_mem_bytes")
                 .max()
                 .alias("gpu_mem_max_bytes"),
+
+                pl.col("_max_rss_bytes")
+                .max()
+                .alias("max_rss_bytes"),
 
                 pl.col("is_workload_step")
                 .sum()
