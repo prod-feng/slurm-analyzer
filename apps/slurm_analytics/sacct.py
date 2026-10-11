@@ -9,10 +9,44 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 
+import re
 import polars as pl
 
-
 SACCT_FIELDS = [
+    "jobid",
+    "jobidraw",
+    "cluster",
+    "partition",
+    "qos",
+    "account",
+    "user",
+    "submit",
+    "eligible",
+    "start",
+    "end",
+    "elapsed",
+    "exitcode",
+    "state",
+    "nnodes",
+    "ntasks",
+    "ncpus",
+    "reqcpus",
+    "reqmem",
+    "reqtres",
+    "alloctres",
+    "timelimit",
+    "nodelist",
+    "tresusageinave",
+    "tresusageinmax",
+    "avecpu",
+    "totalcpu",
+    "maxrss",
+    "maxdiskread",
+    "maxdiskwrite",
+    "jobname",
+]
+
+SACCT_FIELDS_OLD = [
     "jobid",
     "jobidraw",
     "cluster",
@@ -181,6 +215,124 @@ def run_sacct(config=None):
 
 
 def read_sacct_output(output, fields=None, verbose=False):
+    if not output or not output.strip():
+        return pl.DataFrame()
+
+    source_fields = list(fields or SACCT_FIELDS)
+    expected = len(source_fields)
+
+    null_tokens = {
+        "", "Unknown", "unknown", "N/A", "n/a", "None"
+    }
+
+    # Common Slurm IDs include:
+    # 12345, 12345.batch, 12345_2, 12345_2.batch,
+    # 12345_[1-5], and heterogeneous job IDs such as 12345+1.
+    jobid_pattern = re.compile(
+        r"^\d+"
+        r"(?:_(?:\d+|\[[\d,-]+\]))?"
+        r"(?:\+\d+)?"
+        r"(?:\.[A-Za-z0-9_-]+)?$"
+    )
+
+    rows = []
+    skipped_fragments = 0
+    malformed_records = 0
+    diagnostic_examples = []
+    debug_limit = 20
+
+    for line_number, line in enumerate(output.splitlines(), start=1):
+        if not line:
+            continue
+
+        values = line.split("|")
+
+        # --parsable2 output can have a trailing delimiter.
+        if line.endswith("|") and values and values[-1] == "":
+            values.pop()
+
+        field_count = len(values)
+        first_value = values[0].strip() if values else ""
+
+        # A continuation of a multiline JobName is not a new job:
+        # it normally has no recognizable Slurm JobID in column one.
+        if not jobid_pattern.fullmatch(first_value):
+            skipped_fragments += 1
+            if verbose and len(diagnostic_examples) < debug_limit:
+                diagnostic_examples.append(
+                    (line_number, "skipped fragment", line[:500])
+                )
+            continue
+
+        if field_count != expected:
+            malformed_records += 1
+            if verbose and len(diagnostic_examples) < debug_limit:
+                diagnostic_examples.append(
+                    (
+                        line_number,
+                        "expected {0} fields, got {1}".format(
+                            expected, field_count
+                        ),
+                        line[:500],
+                    )
+                )
+
+        # Keep the existing defensive behavior for recognizable records,
+        # but report any adjustment instead of hiding it.
+        values = values[:expected]
+        if len(values) < expected:
+            values.extend([""] * (expected - len(values)))
+
+        rows.append([
+            None if value in null_tokens else value
+            for value in values
+        ])
+
+    if skipped_fragments:
+        print(
+            "[sacct info] skipped {0} non-record line(s), likely "
+            "multiline JobName continuation(s).".format(skipped_fragments),
+            file=sys.stderr,
+        )
+
+    if malformed_records:
+        print(
+            "[sacct warning] found {0} recognizable record(s) with "
+            "unexpected field counts; expected {1} fields.".format(
+                malformed_records, expected
+            ),
+            file=sys.stderr,
+        )
+
+    if verbose:
+        for line_number, reason, raw_line in diagnostic_examples:
+            print(
+                "[sacct debug] line {0}: {1}: {2}".format(
+                    line_number, reason, repr(raw_line)
+                ),
+                file=sys.stderr,
+            )
+
+    if not rows:
+        return pl.DataFrame()
+
+    frame = pl.DataFrame(
+        rows,
+        schema={name: pl.String for name in source_fields},
+        orient="row",
+    )
+
+    # Preserve compatibility with older raw files whose JSON metadata
+    # records a different field list or field order.
+    for name in SACCT_FIELDS:
+        if name not in frame.columns:
+            frame = frame.with_columns(
+                pl.lit(None, dtype=pl.String).alias(name)
+            )
+
+    return frame.select(SACCT_FIELDS)
+
+def read_sacct_output_old(output, fields=None, verbose=False):
 
     if not output or not output.strip():
         return pl.DataFrame()
@@ -193,44 +345,67 @@ def read_sacct_output(output, fields=None, verbose=False):
     # can cause Polars to report a malformed CSV chunk even though the record
     # delimiters are still valid. Slurm does not use CSV quoting for this
     # output format, so each physical line is one record.
+
     rows = []
     null_tokens = {"", "Unknown", "unknown", "N/A", "n/a", "None"}
     malformed_count = 0
     debug_limit = 50
     diagnostic_examples = []
+
     for line_number, line in enumerate(output.splitlines(), start=1):
         if not line:
             continue
+
+        # --parsable2 does not add a separate trailing delimiter.
+        # Keep the final empty element when split() produces one:
+        # it may represent an empty final field such as MaxDiskWrite.
         values = line.split("|")
-        # --parsable2 normally has exactly the expected number of fields,
-        # sometimes followed by one final delimiter (empty trailing field).
-        # Log suspicious physical rows BEFORE padding/truncating so the raw
-        # source data is available for diagnosing historical export issues.
-        field_count = len(values) - (1 if line.endswith("|") else 0)
+        field_count = len(values)
+
         if field_count != expected:
             malformed_count += 1
-            if len(diagnostic_examples) < 5:
-                diagnostic_examples.append((line_number, field_count, line))
-            if verbose and malformed_count <= debug_limit:
-                print(
-                    "[sacct debug] suspicious input row: line={0}, "
-                    "expected_fields={1}, actual_fields={2}, "
-                    "trailing_pipe={3}; raw={4}".format(
-                        line_number,
-                        expected,
-                        field_count,
-                        line.endswith("|"),
-                        repr(line[:4000]) + ("...<truncated>" if len(line) > 4000 else ""),
-                    ),
-                    file=sys.stderr,
+            if len(diagnostic_examples) < debug_limit:
+                diagnostic_examples.append(
+                    (line_number, field_count, line)
                 )
-        # sacct --parsable2 commonly emits a trailing pipe; extra fields from
-        # an older/different export are truncated, while missing fields are
-        # padded with nulls so columns never shift position.
+
+        # Preserve the schema and avoid shifting columns.
         values = values[:expected]
         if len(values) < expected:
             values.extend([""] * (expected - len(values)))
-        rows.append([None if value in null_tokens else value for value in values])
+
+        rows.append([
+            None if value in null_tokens else value
+            for value in values
+        ])
+
+    if malformed_count:
+        print(
+            "[sacct warning] found {0} row(s) with unexpected field counts "
+            "(expected {1} fields).".format(malformed_count, expected),
+            file=sys.stderr,
+        )
+
+        if verbose:
+            for line_no, count, raw_line in diagnostic_examples:
+                print(
+                    "[sacct debug] line {0}: {1} fields: {2}".format(
+                        line_no, count, raw_line
+                    ),
+                    file=sys.stderr,
+                )
+        else:
+            examples = ", ".join(
+                "line {0}: {1} fields".format(line_no, count)
+                for line_no, count, _ in diagnostic_examples[:5]
+            )
+            if examples:
+                print(
+                    "[sacct warning] sample locations: "
+                    + examples
+                    + ". Re-run with --verbose to print raw rows.",
+                    file=sys.stderr,
+                )
 
     if malformed_count:
         print(

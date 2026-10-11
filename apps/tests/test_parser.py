@@ -174,3 +174,25 @@ def test_gpu_memory():
         == 4 * 1024 ** 3
     )
 
+def test_multiline_jobname_continuation_is_not_a_job(capsys):
+    from slurm_analytics.sacct import (
+        SACCT_FIELDS,
+        read_sacct_output,
+    )
+
+    values = [""] * len(SACCT_FIELDS)
+    values[0] = "12345"
+    values[-1] = "python - <<PY"
+
+    output = "|".join(values) + "\n"
+    output += "import os, torch\n"
+    output += "PY\n"
+
+    frame = read_sacct_output(output)
+
+    assert frame.height == 1
+    assert frame["jobid"][0] == "12345"
+
+    captured = capsys.readouterr()
+    assert "skipped" in captured.err
+

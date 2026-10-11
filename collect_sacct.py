@@ -14,7 +14,7 @@ SACCT = "/cm/shared/apps/slurm/current/bin/sacct"
 
 
 # See apps/slurm_analytics/sacct.py, SACCT_FIELDS. Need to be the same.
-FIELDS = [
+FIELDS_OLD = [
     "jobid", "jobidraw", "cluster", "partition", "qos",
     "account", "group", "gid", "user", "uid",
     "submit", "eligible", "start", "end", "elapsed",
@@ -25,6 +25,39 @@ FIELDS = [
     "totalcpu", "maxrss", "maxvmsize","MaxDiskRead","MaxDiskWrite",
 ]
 
+FIELDS = [
+    "jobid",
+    "jobidraw",
+    "cluster",
+    "partition",
+    "qos",
+    "account",
+    "user",
+    "submit",
+    "eligible",
+    "start",
+    "end",
+    "elapsed",
+    "exitcode",
+    "state",
+    "nnodes",
+    "ntasks",
+    "ncpus",
+    "reqcpus",
+    "reqmem",
+    "reqtres",
+    "alloctres",
+    "timelimit",
+    "nodelist",
+    "tresusageinave",
+    "tresusageinmax",
+    "avecpu",
+    "totalcpu",
+    "maxrss",
+    "maxdiskread",
+    "maxdiskwrite",
+    "jobname",
+]
 
 def collect(start, end, output_dir):
     output_dir = Path(output_dir)
@@ -62,7 +95,7 @@ def collect(start, end, output_dir):
                 command,
                 stdout=stdout_file,
                 stderr=subprocess.PIPE,
-                timeout=3600,
+                timeout=360000,
             )
 
         if result.returncode != 0:
