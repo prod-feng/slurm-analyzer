@@ -11,6 +11,7 @@ urlpatterns = [
     path("users/", api.api_users, name="api-users"),
     path("partitions/", api.api_partitions, name="api-partitions"),
     path("partitions/usage/", api.api_partition_usage, name="api-partition-usage"),
+    path("partitions/gpu-types/", api.api_partition_gpu_types, name="api-partition-gpu-types"),
     path("gpu/", api.api_gpu, name="api-gpu"),
     path("runtime/", api.api_runtime, name="api-runtime"),
     path("jobs/", api.api_jobs, name="api-jobs"),

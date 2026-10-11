@@ -1,0 +1,6 @@
+#./collect_sacct.py   --start 2026-05-01   --end 2026-06-01   --chunk-days 3000 --output-dir ./apps/rawdata
+
+
+time ./collect_sacct.py   --start 2019-05-01   --end 2026-10-09   --chunk-days 90 --output-dir ./apps/rawdata/
+
+tar zcf apps.tgz --exclude='apps/data' --exclude='apps/rawdata' --exclude='*.pkl' apps

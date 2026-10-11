@@ -1,7 +1,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from datetime import datetime, timedelta, timezone
+
+import glob
+import os
 
 from django.core.management.base import BaseCommand
 
@@ -37,7 +42,7 @@ def parse_dt(value):
     return dt.astimezone(UTC)
 
 
-def ingest_range(clusters, start, end, timeout, history_file=None):
+def ingest_range(clusters, start, end, timeout, history_file=None, verbose=False):
     """Ingest a range, splitting it recursively if sacct times out."""
     try:
         ingestion = ingest_sacct(
@@ -48,6 +53,7 @@ def ingest_range(clusters, start, end, timeout, history_file=None):
                 timeout=timeout,
             ),
             input_file=history_file,
+            verbose=verbose,
         )
 
     except RuntimeError as exc:
@@ -70,10 +76,10 @@ def ingest_range(clusters, start, end, timeout, history_file=None):
         )
 
         first = ingest_range(
-            clusters, start, midpoint, timeout
+            clusters, start, midpoint, timeout, verbose=verbose
         )
         second = ingest_range(
-            clusters, midpoint, end, timeout
+            clusters, midpoint, end, timeout, verbose=verbose
         )
 
         return first[0] + second[0], first[1] + second[1]
@@ -121,10 +127,16 @@ class Command(BaseCommand):
             help="Skip refreshing the Slurm account hierarchy",
         )
         parser.add_argument(
+            "--verbose",
+            action="store_true",
+            help="Print raw suspicious sacct rows during import (normally only a compact warning is shown)",
+        )
+        parser.add_argument(
             "--history-file",
-            type=str,
+            nargs="+",
             default=None,
-            help="Read raw sacct output from this file instead of running sacct",
+            metavar="FILE",
+            help="Read one or more raw sacct output files instead of running sacct (for example: --history-file history1.out history2.out)",
         )
 
     def handle(self, *args, **options):
@@ -138,6 +150,31 @@ class Command(BaseCommand):
             raise self.CommandError("--chunk-days must be positive")
 
         history_file = options.get("history_file")
+
+        # Expand wildcard patterns here because Python open() does not expand
+        # shell globs. This supports quoted patterns and invocations where
+        # the shell does not perform wildcard expansion.
+        if history_file:
+            expanded_history_files = []
+            for item in history_file:
+                matches = sorted(glob.glob(item))
+                if matches:
+                    expanded_history_files.extend(
+                        match for match in matches if os.path.isfile(match)
+                    )
+                elif os.path.isfile(item):
+                    expanded_history_files.append(item)
+                else:
+                    raise self.CommandError(
+                        "History file or pattern did not match any files: {}".format(item)
+                    )
+
+            # Deduplicate paths while preserving their first-seen order.
+            history_file = list(dict.fromkeys(expanded_history_files))
+            if not history_file:
+                raise self.CommandError(
+                    "No history files found. Check --history-file paths and patterns."
+                )
 
         # Initialize metadata.
         con = connect()
@@ -153,35 +190,29 @@ class Command(BaseCommand):
         chunk_size = timedelta(days=options["chunk_days"])
 
         if history_file:
-            # Import the entire supplied file exactly once.
-            # The start/end options do not filter records in the file.
-            self.stdout.write(
-                "Importing history file: {}".format(history_file)
-            )
+            # Import each supplied file once. Upserts make overlapping files
+            # safe, which is common when collections use adjacent/overlapping
+            # sacct date windows. .out.json sidecars preserve each file's field
+            # list so older collection formats are mapped correctly.
+            for filename in history_file:
+                self.stdout.write("Importing history file: {}".format(filename))
+                jobs, steps = ingest_range(
+                    options["clusters"],
+                    start,
+                    end,
+                    options["timeout"],
+                    history_file=filename,
+                    verbose=options.get("verbose", False),
+                )
+                total_jobs += jobs
+                total_steps += steps
+                self.stdout.write(self.style.SUCCESS("  jobs={} steps={}".format(jobs, steps)))
 
-            jobs, steps = ingest_range(
-                options["clusters"],
-                start,
-                end,
-                options["timeout"],
-                history_file=history_file,
-            )
-
-            total_jobs += jobs
-            total_steps += steps
-
-            # Mark progress only after the file has been imported.
             con = connect()
             try:
                 set_metadata(con, "initialized_through", end.isoformat())
             finally:
                 con.close()
-
-            self.stdout.write(
-                self.style.SUCCESS(
-                    "  jobs={} steps={}".format(jobs, steps)
-                )
-            )
 
         else:
             # Normal mode: retain chunked live sacct ingestion.
@@ -202,6 +233,7 @@ class Command(BaseCommand):
                     cursor,
                     chunk_end,
                     options["timeout"],
+                    verbose=options.get("verbose", False),
                 )
 
                 total_jobs += jobs

@@ -2,6 +2,8 @@
 let userSort={sort:"cpu_hours",direction:"desc"};
 let accountSort={sort:"name",direction:"asc"};
 let partitionSort={sort:"cpu_hours",direction:"desc"};
+let pendingLoads=0;
+function setLoading(active){pendingLoads=Math.max(0,pendingLoads+(active?1:-1));const indicator=document.getElementById("loading-indicator");if(indicator)indicator.classList.toggle("visible",pendingLoads>0);const button=document.getElementById("apply-range");if(button)button.disabled=pendingLoads>0;}
 let lastPartitions=[];
 let lastUsers=[];let lastAccounts=[];
 async function getJSON(url){const r=await fetch(url);if(!r.ok)throw new Error(`${url}: HTTP ${r.status} ${await r.text()}`);return r.json()}
@@ -12,10 +14,34 @@ function baseLayout(title){return{title,margin:{l:65,r:25,t:55,b:55},hovermode:"
 function fmt(v){return Number(v||0).toLocaleString(undefined,{maximumFractionDigits:1})}
 function safe(v){return v==null?"":String(v).replace(/[&<>\"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
 function pieData(rows,metric,label){const sorted=[...rows].sort((a,b)=>Number(b[metric]||0)-Number(a[metric]||0));const top=sorted.slice(0,10);const other=sorted.slice(10).reduce((s,r)=>s+Number(r[metric]||0),0);const labels=top.map(r=>r[label]);const values=top.map(r=>Number(r[metric]||0));if(other>0){labels.push("Other");values.push(other)}return {labels,values}}
-function renderPie(id,rows,metric,label,title){const p=pieData(rows,metric,label);const total=rows.reduce((sum,r)=>sum+Number(r[metric]||0),0);const totalText=metric==="jobs"?Math.round(total).toLocaleString():total.toLocaleString(undefined,{maximumFractionDigits:1});const units={jobs:"jobs",allocated_nodes:"node allocations",cpu_hours:"CPU-hours",gpu_hours:"GPU-hours",memory_gb_hours:"GiB-hours",total_tasks:"tasks",disk_read_gib:"GiB read",disk_write_gib:"GiB written",elapsed_hours:"hours"};const unit=units[metric]||metric.replaceAll("_"," ");Plotly.react(id,[{labels:p.labels,values:p.values,type:"pie",textinfo:"label+percent",hovertemplate:"%{label}: %{value:.1f} (%{percent})<extra></extra>"}],{title:{text:`${title}<br><sup>Total: ${totalText} ${unit}</sup>`},margin:{l:20,r:20,t:80,b:25},legend:{orientation:"h"}},{responsive:true})}
+function renderPie(id,rows,metric,label,title){
+  const sorted=[...rows].sort((a,b)=>Number(b[metric]||0)-Number(a[metric]||0));
+  const total=rows.reduce((sum,r)=>sum+Number(r[metric]||0),0);
+  const totalText=metric==="jobs"?Math.round(total).toLocaleString():total.toLocaleString(undefined,{maximumFractionDigits:1});
+  const units={jobs:"jobs",allocated_nodes:"node allocations",cpu_hours:"CPU-hours",gpu_hours:"GPU-hours",memory_gb_hours:"GiB-hours",total_tasks:"tasks",disk_read_gib:"GiB data read",disk_write_gib:"GiB data written",elapsed_hours:"hours"};
+  const unit=units[metric]||metric.replaceAll("_"," ");
+  const titleText=`${title}<br><sup>Total: ${totalText} ${unit}</sup>`;
+  // For any metric, a single account/user with >=80% of the total makes a
+  // conventional pie hard to read. Show the dominant contributor vs everyone
+  // else, plus a second pie expanding the remaining contributors.
+  if(total>0 && sorted.length>1 && Number(sorted[0][metric]||0)/total>=0.8){
+    const dominant=sorted[0],rest=sorted.slice(1),dominantValue=Number(dominant[metric]||0);
+    const restTotal=rest.reduce((sum,r)=>sum+Number(r[metric]||0),0);
+    const restPie=pieData(rest,metric,label);
+    const traces=[
+      {type:"pie",labels:[dominant[label],"All others"],values:[dominantValue,restTotal],domain:{x:[0,0.47],y:[0,1]},textinfo:"label+percent",hovertemplate:`%{label}: %{value:,.1f} ${unit} (%{percent})<extra></extra>`,sort:false},
+      {type:"pie",labels:restPie.labels,values:restPie.values,domain:{x:[0.53,1],y:[0,1]},textinfo:"label+percent",hovertemplate:`%{label}: %{value:,.1f} ${unit} (%{percent} of remaining share)<extra></extra>`}
+    ];
+    Plotly.react(id,traces,{title:{text:titleText},annotations:[{text:"Overall share",x:0.235,y:0.98,xref:"paper",yref:"paper",showarrow:false},{text:`All others (${restTotal.toLocaleString(undefined,{maximumFractionDigits:1})} ${unit})`,x:0.765,y:0.98,xref:"paper",yref:"paper",showarrow:false}],margin:{l:10,r:10,t:95,b:20},showlegend:false},{responsive:true});
+    return;
+  }
+  const p=pieData(rows,metric,label);
+  Plotly.react(id,[{labels:p.labels,values:p.values,type:"pie",textinfo:"label+percent",hovertemplate:"%{label}: %{value:.1f} (%{percent})<extra></extra>"}],{title:{text:titleText},margin:{l:20,r:20,t:80,b:25},legend:{orientation:"h"}},{responsive:true});
+}
 function fmtMaybe(v,suffix=""){return v==null||!Number.isFinite(Number(v))?"N/A":fmt(Number(v))+suffix}
 function secondsHours(v){return v==null?null:Number(v)/3600}
 async function loadOverview(){
+  setLoading(true);
   try{
     const {start,end}=getRange(),interval=document.getElementById("interval").value;
     const [summary,metadata,series]=await Promise.all([
@@ -62,10 +88,11 @@ async function loadOverview(){
       {x,y:rows.map(r=>r.allocated_gpus),name:"Concurrent allocated GPUs",type:"scatter",mode:"lines",yaxis:"y2"}
     ],{...baseLayout("Concurrent resource allocation"),yaxis:{title:"CPUs"},yaxis2:{title:"GPUs",overlaying:"y",side:"right"}},{responsive:true});
     document.getElementById("error").textContent="";
-  }catch(e){document.getElementById("error").textContent="Unable to load dashboard: "+e.message}
+  }catch(e){document.getElementById("error").textContent="Unable to load dashboard: "+e.message}finally{setLoading(false)}
 }
-async function loadUsers(){try{const {start,end}=getRange(),u=document.getElementById("user-filter").value,a=document.getElementById("user-account-filter").value;lastUsers=await getJSON(`/api/users/usage/?user=${encodeURIComponent(u)}&account=${encodeURIComponent(a)}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&limit=10000&sort=${encodeURIComponent(userSort.sort)}&direction=${userSort.direction}`);document.getElementById("users-body").innerHTML=lastUsers.map(r=>`<tr><td>${safe(r.user)}</td><td class="num">${fmt(r.jobs)}</td><td class="num">${fmt(r.allocated_nodes)}</td><td class="num">${fmt(r.cpu_hours)}</td><td class="num">${fmt(r.gpu_hours)}</td><td class="num">${fmt(r.memory_gb_hours)}</td><td class="num">${fmt(r.gpu_memory_gb)}</td><td class="num">${fmt(r.total_tasks)}</td><td class="num">${fmt(r.disk_read_gib)}</td><td class="num">${fmt(r.disk_write_gib)}</td></tr>`).join("");renderPie("users-jobs-pie",lastUsers,"jobs","user","Users: job-count share");renderPie("users-nodes-pie",lastUsers,"allocated_nodes","user","Users: allocated-node share");renderPie("users-cpu-pie",lastUsers,"cpu_hours","user","Users: CPU-hour share");renderPie("users-gpu-pie",lastUsers,"gpu_hours","user","Users: GPU-hour share");renderPie("users-ram-pie",lastUsers,"memory_gb_hours","user","Users: RAM usage share (GiB-hours)");renderPie("users-tasks-pie",lastUsers,"total_tasks","user","Users: task-count share (sum of NTasks)");renderPie("users-read-pie",lastUsers,"disk_read_gib","user","Users: disk-read share (MaxDiskRead, GiB)");renderPie("users-write-pie",lastUsers,"disk_write_gib","user","Users: disk-write share (MaxDiskWrite, GiB)");updateSortIndicators("sort-",userSort)}catch(e){document.getElementById("error").textContent="Unable to load users: "+e.message}}
+async function loadUsers(){setLoading(true);try{const {start,end}=getRange(),u=document.getElementById("user-filter").value,a=document.getElementById("user-account-filter").value;lastUsers=await getJSON(`/api/users/usage/?user=${encodeURIComponent(u)}&account=${encodeURIComponent(a)}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&limit=10000&sort=${encodeURIComponent(userSort.sort)}&direction=${userSort.direction}`);document.getElementById("users-body").innerHTML=lastUsers.map(r=>`<tr><td>${safe(r.user)}</td><td class="num">${fmt(r.jobs)}</td><td class="num">${fmt(r.allocated_nodes)}</td><td class="num">${fmt(r.cpu_hours)}</td><td class="num">${fmt(r.gpu_hours)}</td><td class="num">${fmt(r.memory_gb_hours)}</td><td class="num">${fmt(r.gpu_memory_gb)}</td><td class="num">${fmt(r.total_tasks)}</td><td class="num">${fmt(r.disk_read_gib)}</td><td class="num">${fmt(r.disk_write_gib)}</td></tr>`).join("");renderPie("users-jobs-pie",lastUsers,"jobs","user","Users: job-count share");renderPie("users-nodes-pie",lastUsers,"allocated_nodes","user","Users: allocated-node share");renderPie("users-cpu-pie",lastUsers,"cpu_hours","user","Users: CPU-hour share");renderPie("users-gpu-pie",lastUsers,"gpu_hours","user","Users: GPU-hour share");renderPie("users-ram-pie",lastUsers,"memory_gb_hours","user","Users: RAM usage share (GiB-hours)");renderPie("users-tasks-pie",lastUsers,"total_tasks","user","Users: task-count share (sum of NTasks)");renderPie("users-read-pie",lastUsers,"disk_read_gib","user","Users: data-read share (MaxDiskRead, GiB)");renderPie("users-write-pie",lastUsers,"disk_write_gib","user","Users: data-write share (MaxDiskWrite, GiB)");updateSortIndicators("sort-",userSort)}catch(e){document.getElementById("error").textContent="Unable to load users: "+e.message}finally{setLoading(false)}}
 async function loadAccounts(){
+  setLoading(true);
   try{
     const {start,end}=getRange(),filter=document.getElementById("account-filter").value.trim();
     const tree=await getJSON(`/api/accounts/tree/?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&sort=name&direction=asc`);
@@ -75,7 +102,7 @@ async function loadAccounts(){
     updateAccountPieFilters();
     renderAccountPies();
     updateSortIndicators("asort-",accountSort);
-  }catch(e){document.getElementById("error").textContent="Unable to load accounts: "+e.message}
+  }catch(e){document.getElementById("error").textContent="Unable to load accounts: "+e.message}finally{setLoading(false)}
 }
 function accountDepths(rows){
   const byName=new Map(rows.filter(r=>r.account).map(r=>[String(r.account),r]));
@@ -114,7 +141,7 @@ function renderAccountPies(){
   const departments=rows.filter(r=>r._depth===0);
   const pis=rows.filter(r=>r._depth===1&&(!dept||descendantsOf(rows,dept).some(d=>d.account===r.account)));
   const projects=rows.filter(r=>r._depth>=2&&(!dept||descendantsOf(rows,dept).some(d=>d.account===r.account))&&(!pi||descendantsOf(rows,pi).some(d=>d.account===r.account)));
-  const metricLabel={jobs:"jobs",cpu_hours:"CPU-hours",gpu_hours:"GPU-hours",memory_gb_hours:"memory GiB-hours",elapsed_hours:"elapsed hours",total_tasks:"tasks",disk_read_gib:"disk-read GiB",disk_write_gib:"disk-write GiB"}[metric]||metric;
+  const metricLabel={jobs:"jobs",cpu_hours:"CPU-hours",gpu_hours:"GPU-hours",memory_gb_hours:"memory GiB-hours",elapsed_hours:"elapsed hours",total_tasks:"tasks",disk_read_gib:"data-read GiB",disk_write_gib:"data-write GiB"}[metric]||metric;
   renderPie("accounts-dept-pie",departments,metric,"account",`Departments: ${metricLabel} share`);
   renderPie("accounts-pi-pie",pis,metric,"account",`PIs: ${metricLabel} share`);
   renderPie("accounts-project-pie",projects,metric,"account",`Projects: ${metricLabel} share`);
@@ -125,7 +152,7 @@ function renderAccountPies(){
   const metrics=[
     ["cpu_hours","CPU-hours share"], ["gpu_hours","GPU-hours share"],
     ["memory_gb_hours","RAM usage share (GiB-hours)"], ["total_tasks","Task-count share (sum of NTasks)"],
-    ["disk_read_gib","Disk-read share (GiB)"], ["disk_write_gib","Disk-write share (GiB)"],
+    ["disk_read_gib","Data-read share (GiB)"], ["disk_write_gib","Data-write share (GiB)"],
   ];
   for(let depth=0;depth<=maxDepth;depth++){
     const atLevel=rows.filter(r=>r._depth===depth);
@@ -144,18 +171,28 @@ function updatePartitionSortIndicators(){for(const key of ["partition","jobs","c
 function renderPartitionTable(){const key=partitionSort.sort;const rows=[...lastPartitions].sort((a,b)=>{const av=a[key],bv=b[key];let cmp;if(key==="partition")cmp=String(av||"").localeCompare(String(bv||""));else cmp=(Number(av)||0)-(Number(bv)||0);return partitionSort.direction==="asc"?cmp:-cmp});document.getElementById("partitions-body").innerHTML=rows.map(r=>`<tr><td>${safe(r.partition)}</td><td class="num">${fmt(r.jobs)}</td><td class="num">${fmt(r.cpu_hours)}</td><td class="num">${fmt(r.gpu_hours)}</td><td class="num">${fmtMaybe(r.avg_nodes_per_job)}</td><td class="num">${fmtMaybe(r.max_nodes_per_job)}</td><td class="num">${fmtMaybe(r.avg_tasks_per_job)}</td><td class="num">${fmtMaybe(r.max_tasks_per_job)}</td><td class="num">${fmt(r.memory_gb_hours)}</td><td class="num">${fmt(r.total_tasks)}</td><td class="num">${fmt(r.disk_read_gib)}</td><td class="num">${fmt(r.disk_write_gib)}</td></tr>`).join("");updatePartitionSortIndicators()}
 function sortPartitions(key){togglePartitionSort(key);renderPartitionTable()}
 async function loadPartitions(){
+  setLoading(true);
   try{
     const {start,end}=getRange();
-    lastPartitions=await getJSON(`/api/partitions/usage/?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
+    const [partitionRows, gpuTypeData]=await Promise.all([
+      getJSON(`/api/partitions/usage/?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`),
+      getJSON(`/api/partitions/gpu-types/?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
+    ]);
+    lastPartitions=partitionRows;
     renderPartitionTable();
+    const gpuTypes=gpuTypeData.types||[], partitionGpuTypes=gpuTypeData.partition_types||[];
+    renderPie("partition-gpu-type-jobs-pie",gpuTypes,"jobs","gpu_type","GPU models: job-count share");
+    renderPie("partition-gpu-type-count-pie",gpuTypes,"total_gpus","gpu_type","GPU models: allocated GPU share");
+    renderPie("partition-gpu-type-hours-pie",gpuTypes,"gpu_hours","gpu_type","GPU models: GPU-hours share");
+    document.getElementById("partition-gpu-types-body").innerHTML=partitionGpuTypes.map(r=>`<tr><td>${safe(r.partition)}</td><td>${safe(r.gpu_type)}</td><td class="num">${fmt(r.jobs)}</td><td class="num">${fmt(r.total_gpus)}</td><td class="num">${fmtMaybe(r.avg_gpus_per_job)}</td><td class="num">${fmt(r.gpu_hours)}</td></tr>`).join("");
     renderPie("partition-cpu-pie",lastPartitions,"cpu_hours","partition","Partitions: CPU-hours share");
     renderPie("partition-gpu-pie",lastPartitions,"gpu_hours","partition","Partitions: GPU-hours share");
     renderPie("partition-ram-pie",lastPartitions,"memory_gb_hours","partition","Partitions: RAM usage share (GiB-hours)");
     renderPie("partition-tasks-pie",lastPartitions,"total_tasks","partition","Partitions: task-count share (sum of NTasks)");
-    renderPie("partition-read-pie",lastPartitions,"disk_read_gib","partition","Partitions: disk-read share (GiB)");
-    renderPie("partition-write-pie",lastPartitions,"disk_write_gib","partition","Partitions: disk-write share (GiB)");
+    renderPie("partition-read-pie",lastPartitions,"disk_read_gib","partition","Partitions: data-read share (GiB)");
+    renderPie("partition-write-pie",lastPartitions,"disk_write_gib","partition","Partitions: data-write share (GiB)");
     document.getElementById("error").textContent="";
-  }catch(e){document.getElementById("error").textContent="Unable to load partitions: "+e.message}
+  }catch(e){document.getElementById("error").textContent="Unable to load partitions: "+e.message}finally{setLoading(false)}
 }
 
 function hierarchicalAccounts(rows,filter){
@@ -191,7 +228,7 @@ function updateSortIndicators(prefix,state){document.querySelectorAll(`[id^="${p
 function toggleSort(state,key){if(state.sort===key)state.direction=state.direction==="asc"?"desc":"asc";else{state.sort=key;state.direction=key==="name"||key==="user"?"asc":"desc"}}
 function sortUsers(key){toggleSort(userSort,key);loadUsers()}
 function sortAccounts(key){toggleSort(accountSort,key);loadAccounts()}
-document.getElementById("range").addEventListener("change",()=>{const custom=document.getElementById("range").value==="custom";document.getElementById("custom-range").classList.toggle("visible",custom);if(custom&&!document.getElementById("custom-start").value){const end=new Date();document.getElementById("custom-end").value=toISOInput(end);document.getElementById("custom-start").value=toISOInput(new Date(end.getTime()-7*864e5))}else loadActiveTab()});document.getElementById("apply-range").addEventListener("click",loadActiveTab);document.getElementById("interval").addEventListener("change",loadOverview);
+document.getElementById("range").addEventListener("change",()=>{const custom=document.getElementById("range").value==="custom";document.getElementById("custom-range").classList.toggle("visible",custom);if(custom&&!document.getElementById("custom-start").value){const end=new Date();document.getElementById("custom-end").value=toISOInput(end);document.getElementById("custom-start").value=toISOInput(new Date(end.getTime()-7*864e5))}else loadActiveTab()});document.getElementById("apply-range").addEventListener("click",event=>{event.preventDefault();loadActiveTab()});document.getElementById("interval").addEventListener("change",loadOverview);
 document.getElementById("account-pie-metric").addEventListener("change",renderAccountPies);
 document.getElementById("pi-dept-filter").addEventListener("change",()=>{updateAccountPieFilters();renderAccountPies()});
 document.getElementById("project-pi-filter").addEventListener("change",renderAccountPies);

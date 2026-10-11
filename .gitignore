@@ -11,7 +11,11 @@ mytest*
 nohup.out
 *.yaml
 *json
-apps/data/slurm.duckdb
+apps/
+data/slurm.duckdb
+apps/rawdata
+*.zip
+*.tgz
 refresh_slurm_data.log
 .slurm_snapshot.pkl
 __pycache__/

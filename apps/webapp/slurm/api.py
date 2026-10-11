@@ -410,6 +410,164 @@ def api_partition_usage(request):
 
 
 @require_GET
+def api_partition_gpu_types(request):
+    """Summarize GPU models, falling back to node inventory for generic GPU TRES."""
+    snapshot, response = _snapshot_or_response()
+    if response:
+        return response
+    from datetime import datetime, timedelta, timezone
+    import re
+    import subprocess
+    from collections import defaultdict
+    from slurm_analytics.storage import connect
+
+    now = datetime.now(timezone.utc)
+    start = request.GET.get("start") or (now - timedelta(days=7)).isoformat()
+    end = request.GET.get("end") or now.isoformat()
+    try:
+        con = connect()
+        try:
+            cols = {r[0].lower() for r in con.execute("DESCRIBE jobs").fetchall()}
+        finally:
+            con.close()
+        if "alloctres" not in cols:
+            return JsonResponse({"types": [], "partition_types": [], "note": "AllocTRES is not stored; GPU models cannot be identified."})
+        partition_expr = "COALESCE(NULLIF(TRIM(partition), ''), '(Unknown partition)')" if "partition" in cols else "'(Unknown partition)'"
+        elapsed_expr = "TRY_CAST(elapsed_seconds AS DOUBLE)" if "elapsed_seconds" in cols else "NULL::DOUBLE"
+        state_expr = "lower(COALESCE(state_category, ''))" if "state_category" in cols else "''"
+        start_expr = "TRY_CAST(start_time AS TIMESTAMPTZ)" if "start_time" in cols else "NULL::TIMESTAMPTZ"
+        id_expr = "COALESCE(CAST(canonical_job_id AS VARCHAR), CAST(jobid AS VARCHAR))" if "canonical_job_id" in cols and "jobid" in cols else ("CAST(canonical_job_id AS VARCHAR)" if "canonical_job_id" in cols else "CAST(jobid AS VARCHAR)")
+        nodelist_expr = "COALESCE(CAST(nodelist AS VARCHAR), '')" if "nodelist" in cols else "''"
+        frame = query_df(
+            "SELECT {id_expr} AS job_id, {partition_expr} AS partition_list, alloctres, {elapsed_expr} AS elapsed_seconds, {nodelist_expr} AS nodelist FROM jobs WHERE {start_expr} >= TRY_CAST(? AS TIMESTAMPTZ) AND {start_expr} < TRY_CAST(? AS TIMESTAMPTZ) AND {state_expr} NOT IN ('running','pending')".format(
+                id_expr=id_expr, partition_expr=partition_expr, elapsed_expr=elapsed_expr,
+                nodelist_expr=nodelist_expr, start_expr=start_expr, state_expr=state_expr), [start, end])
+
+        typed_pattern = re.compile(r"(?:gres/)?gpu:([^=,:]+)(?::[^=,]+)?=([0-9]+(?:\.[0-9]+)?)", re.I)
+        generic_pattern = re.compile(r"(?:gres/)?gpu=([0-9]+(?:\.[0-9]+)?)", re.I)
+        node_typed_pattern = re.compile(r"(?:^|,)gpu:([^:,()]+):([0-9]+)(?=\(|,|$)", re.I)
+        node_generic_pattern = re.compile(r"(?:^|,)gpu:([0-9]+)(?=\(|,|$)", re.I)
+
+        # Current node inventory provides model information when old/generic
+        # AllocTRES records contain only gres/gpu=N. Build a node -> model/capacity map.
+        node_models = defaultdict(lambda: defaultdict(float))
+        nodes_df = getattr(snapshot, "nodes", None)
+        if nodes_df is None or nodes_df.is_empty():
+            # Snapshots rebuilt from DuckDB after a web-worker restart do not
+            # include node inventory. Fetch it only on demand (this endpoint is
+            # itself lazy-loaded by the UI), then retain it on the snapshot.
+            try:
+                from slurm_analytics.node_inventory import refresh_node_inventory
+                nodes_df = refresh_node_inventory()
+                snapshot.nodes = nodes_df
+            except Exception:
+                nodes_df = None
+        if nodes_df is not None and not nodes_df.is_empty():
+            for node in nodes_df.to_dicts():
+                node_name = str(node.get("node_name") or "").strip()
+                gres = str(node.get("gres") or "")
+                if not node_name:
+                    continue
+                for match in node_typed_pattern.finditer(gres):
+                    node_models[node_name][match.group(1).strip().upper()] += float(match.group(2))
+                # A model-specific GresUsed value may be present even when Gres is generic.
+                if not node_models[node_name]:
+                    gres_used = str(node.get("gres_used") or "")
+                    for match in node_typed_pattern.finditer(gres_used):
+                        node_models[node_name][match.group(1).strip().upper()] += float(match.group(2))
+
+        hostname_cache = {}
+        def expand_nodelist(expression):
+            expression = str(expression or "").strip()
+            if not expression or expression.lower() in ("(null)", "none", "unknown"):
+                return []
+            if expression in hostname_cache:
+                return hostname_cache[expression]
+            names = []
+            if "[" in expression and "]" in expression:
+                try:
+                    result = subprocess.run(["scontrol", "show", "hostnames", expression], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, timeout=5)
+                    if result.returncode == 0:
+                        names = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+                except (OSError, subprocess.SubprocessError):
+                    names = []
+            if not names:
+                names = [part.strip() for part in expression.split(",") if part.strip()]
+            hostname_cache[expression] = names
+            return names
+
+        def infer_from_nodes(nodelist, gpu_count):
+            per_type = defaultdict(float)
+            capacities = defaultdict(float)
+            for node_name in expand_nodelist(nodelist):
+                for model, capacity in node_models.get(node_name, {}).items():
+                    capacities[model] += capacity
+            if not capacities:
+                return {}
+            # If all allocated nodes expose one model, attribute all allocated GPUs
+            # to it. For mixed-model node lists, distribute by known GPU capacity.
+            if len(capacities) == 1:
+                return {next(iter(capacities)): gpu_count}
+            total_capacity = sum(capacities.values())
+            if total_capacity <= 0:
+                return {}
+            for model, capacity in capacities.items():
+                per_type[model] = gpu_count * capacity / total_capacity
+            return dict(per_type)
+
+        type_jobs = defaultdict(set)
+        type_gpus = defaultdict(float)
+        type_gpu_hours = defaultdict(float)
+        type_max = defaultdict(float)
+        partition_jobs = defaultdict(set)
+        partition_gpus = defaultdict(float)
+        partition_gpu_hours = defaultdict(float)
+        for row in frame.to_dicts():
+            tres = str(row.get("alloctres") or "")
+            matches = [(m.group(1).strip().upper(), float(m.group(2))) for m in typed_pattern.finditer(tres)]
+            if not matches:
+                generic_matches = [float(m.group(1)) for m in generic_pattern.finditer(tres)]
+                if generic_matches:
+                    total_generic = sum(generic_matches)
+                    inferred = infer_from_nodes(row.get("nodelist"), total_generic)
+                    matches = list(inferred.items()) if inferred else [("Unspecified GPU", total_generic)]
+            if not matches:
+                continue
+            per_type = defaultdict(float)
+            for gpu_type, count in matches:
+                per_type[gpu_type] += count
+            elapsed_hours = max(float(row.get("elapsed_seconds") or 0), 0.0) / 3600.0
+            job_id = str(row.get("job_id") or "")
+            partitions = [p.strip() for p in str(row.get("partition_list") or "(Unknown partition)").split(",") if p.strip()]
+            if not partitions:
+                partitions = ["(Unknown partition)"]
+            divisor = float(len(partitions))
+            for gpu_type, count in per_type.items():
+                type_jobs[gpu_type].add(job_id)
+                type_gpus[gpu_type] += count
+                type_gpu_hours[gpu_type] += count * elapsed_hours
+                type_max[gpu_type] = max(type_max[gpu_type], count)
+                for partition in partitions:
+                    key = (partition, gpu_type)
+                    partition_jobs[key].add(job_id)
+                    partition_gpus[key] += count / divisor
+                    partition_gpu_hours[key] += count * elapsed_hours / divisor
+
+        types = []
+        for gpu_type in sorted(type_jobs):
+            n = len(type_jobs[gpu_type])
+            types.append({"gpu_type": gpu_type, "jobs": n, "total_gpus": round(type_gpus[gpu_type], 3), "avg_gpus_per_job": round(type_gpus[gpu_type] / n, 3) if n else None, "max_gpus_per_job": type_max[gpu_type], "gpu_hours": round(type_gpu_hours[gpu_type], 3)})
+        partition_types = []
+        for (partition, gpu_type), job_ids in partition_jobs.items():
+            n = len(job_ids)
+            partition_types.append({"partition": partition, "gpu_type": gpu_type, "jobs": n, "total_gpus": round(partition_gpus[(partition, gpu_type)], 3), "avg_gpus_per_job": round(partition_gpus[(partition, gpu_type)] / n, 3) if n else None, "gpu_hours": round(partition_gpu_hours[(partition, gpu_type)], 3)})
+        partition_types.sort(key=lambda r: (-r["gpu_hours"], r["partition"], r["gpu_type"]))
+        return JsonResponse({"types": sorted(types, key=lambda r: (-r["gpu_hours"], r["gpu_type"])), "partition_types": partition_types}, safe=False)
+    except Exception as exc:
+        return JsonResponse({"error": str(exc)}, status=500)
+
+
+@require_GET
 def api_gpu(request):
     snapshot, response = _snapshot_or_response()
     if response:
@@ -525,8 +683,19 @@ def api_timeseries(request):
             # can silently yield NULL for otherwise valid sacct values.
             import re
             step_rows = query_df(
-                "SELECT canonical_job_id, maxrss FROM job_steps WHERE maxrss IS NOT NULL",
-                [],
+                """
+                SELECT s.canonical_job_id, s.maxrss
+                FROM job_steps s
+                INNER JOIN jobs j
+                  ON CAST(s.canonical_job_id AS VARCHAR) = CAST(j.canonical_job_id AS VARCHAR)
+                WHERE s.maxrss IS NOT NULL
+                  AND ((j.start_time IS NOT NULL
+                        AND j.start_time < TRY_CAST(? AS TIMESTAMPTZ)
+                        AND (j.end_time IS NULL OR j.end_time > TRY_CAST(? AS TIMESTAMPTZ)))
+                    OR (j.submit_time >= TRY_CAST(? AS TIMESTAMPTZ)
+                        AND j.submit_time < TRY_CAST(? AS TIMESTAMPTZ)))
+                """,
+                [requested_end, requested_start, requested_start, requested_end],
             )
             def parse_rss_bytes(value):
                 if value is None:

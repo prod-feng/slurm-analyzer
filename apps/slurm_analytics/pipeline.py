@@ -27,12 +27,20 @@ class IngestionResult(object):
         self.consolidated_jobs = consolidated_jobs
 
 
-def ingest_sacct(config=None, input_file=None, timing=None):
+def ingest_sacct(config=None, input_file=None, timing=None, verbose=False):
 
     if input_file:
-        raw = read_sacct_file(input_file)
+        if isinstance(input_file, (list, tuple)):
+            frames = [read_sacct_file(path, verbose=verbose) for path in input_file]
+            frames = [frame for frame in frames if not frame.is_empty()]
+            if not frames:
+                raw = read_sacct_file(input_file[0], verbose=verbose)
+            else:
+                raw = frames[0] if len(frames) == 1 else __import__("polars").concat(frames, how="diagonal_relaxed")
+        else:
+            raw = read_sacct_file(input_file, verbose=verbose)
     else:
-        raw = fetch_sacct(config)
+        raw = fetch_sacct(config, verbose=verbose)
 
     normalized = classify_and_normalize(
         raw
