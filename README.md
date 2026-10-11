@@ -1,6 +1,15 @@
-Slurm historical jobs analyzer
+## Python3, Django, Polars, DuckDB, Singularity.
 
-Python3, Django, Polars, DuckDB, Singularity.
+#### CPU, GPU, RAM aggregated statistics.
+
+
+<img width="" height="268" alt="Screenshot 2026-10-11 at 2 16 33 PM" src="https://github.com/user-attachments/assets/edc3654e-9659-43f6-90c7-a326a2751b67" />
+
+<img width="283" height="268" alt="Screenshot 2026-10-11 at 2 19 23 PM" src="https://github.com/user-attachments/assets/612a887b-13fd-4281-8261-86667a43dc00" />
+
+
+<img width="" height="268" alt="Screenshot 2026-10-11 at 2 15 34 PM" src="https://github.com/user-attachments/assets/de8dc520-17b1-4cbc-a39c-7b2b93b00ce5" />
+
 
 # Slurm Analytics
 
