@@ -451,6 +451,7 @@ def api_partition_gpu_types(request):
         # Current node inventory provides model information when old/generic
         # AllocTRES records contain only gres/gpu=N. Build a node -> model/capacity map.
         node_models = defaultdict(lambda: defaultdict(float))
+        partition_models = defaultdict(lambda: defaultdict(float))
         nodes_df = getattr(snapshot, "nodes", None)
         if nodes_df is None or nodes_df.is_empty():
             # Snapshots rebuilt from DuckDB after a web-worker restart do not
@@ -563,6 +564,284 @@ def api_partition_gpu_types(request):
             partition_types.append({"partition": partition, "gpu_type": gpu_type, "jobs": n, "total_gpus": round(partition_gpus[(partition, gpu_type)], 3), "avg_gpus_per_job": round(partition_gpus[(partition, gpu_type)] / n, 3) if n else None, "gpu_hours": round(partition_gpu_hours[(partition, gpu_type)], 3)})
         partition_types.sort(key=lambda r: (-r["gpu_hours"], r["partition"], r["gpu_type"]))
         return JsonResponse({"types": sorted(types, key=lambda r: (-r["gpu_hours"], r["gpu_type"])), "partition_types": partition_types}, safe=False)
+    except Exception as exc:
+        return JsonResponse({"error": str(exc)}, status=500)
+
+
+@require_GET
+def api_gpu_type_usage(request):
+    """Return GPU-hours by GPU model for each user and account hierarchy node.
+
+    Explicit AllocTRES model names take precedence. Generic GPU counts are
+    attributed using the current scontrol node inventory when possible.
+    """
+    snapshot, response = _snapshot_or_response()
+    if response:
+        return response
+
+    from datetime import datetime, timedelta, timezone
+    from collections import defaultdict
+    import re
+    import subprocess
+    from slurm_analytics.storage import connect
+
+    now = datetime.now(timezone.utc)
+    start = request.GET.get("start") or (now - timedelta(days=7)).isoformat()
+    end = request.GET.get("end") or now.isoformat()
+    try:
+        con = connect()
+        try:
+            cols = {r[0].lower() for r in con.execute("DESCRIBE jobs").fetchall()}
+            tables = {r[0] for r in con.execute("SHOW TABLES").fetchall()}
+            account_rows = con.execute("SELECT account_name, parent_name, level, path FROM accounts").fetchall() if "accounts" in tables else []
+        finally:
+            con.close()
+
+        required = {"alloctres", "start_time", "elapsed_seconds"}
+        if not required.issubset(cols):
+            return JsonResponse({"types": [], "users": [], "accounts": [], "note": "Required GPU accounting fields are not stored."})
+
+        user_expr = "COALESCE(NULLIF(TRIM(CAST(\"user\" AS VARCHAR)), ''), '(Unknown user)')" if "user" in cols else "'(Unknown user)'"
+        account_expr = "COALESCE(NULLIF(TRIM(CAST(account AS VARCHAR)), ''), 'Unknown')" if "account" in cols else "'Unknown'"
+        # Accounting imports may use a different spelling for the node list.
+        # Prefer the canonical Slurm field, but support common normalized aliases.
+        nodelist_col = next((name for name in ("nodelist", "node_list", "nodes") if name in cols), None)
+        nodelist_expr = "COALESCE(CAST(\"{}\" AS VARCHAR), '')".format(nodelist_col) if nodelist_col else "''"
+        partition_expr = "COALESCE(CAST(partition AS VARCHAR), '')" if "partition" in cols else "''"
+        state_expr = "lower(COALESCE(state_category, ''))" if "state_category" in cols else "''"
+        rows = query_df(
+            "SELECT {user} AS user_name, {account} AS account_name, alloctres, {elapsed} AS elapsed_seconds, {nodes} AS nodelist, {partition} AS partition_name "
+            "FROM jobs WHERE TRY_CAST(start_time AS TIMESTAMPTZ) >= TRY_CAST(? AS TIMESTAMPTZ) "
+            "AND TRY_CAST(start_time AS TIMESTAMPTZ) < TRY_CAST(? AS TIMESTAMPTZ) "
+            "AND {state} NOT IN ('running','pending')".format(
+                user=user_expr, account=account_expr, elapsed="TRY_CAST(elapsed_seconds AS DOUBLE)", nodes=nodelist_expr, partition=partition_expr, state=state_expr
+            ), [start, end]
+        )
+
+        typed_pattern = re.compile(r"(?:gres/)?gpu:([^=,:]+)(?::[^=,]+)?=([0-9]+(?:\.[0-9]+)?)", re.I)
+        generic_pattern = re.compile(r"(?:gres/)?gpu=([0-9]+(?:\.[0-9]+)?)", re.I)
+        # Slurm GRES strings vary: examples include gpu:h200:8,
+        # gpu:h200:8(S:0-7), gpu:rtx6000:4 and comma-separated variants.
+        node_typed_pattern = re.compile(r"gpu:([^:,()\s]+):([0-9]+)(?=\(|,|\s|$)", re.I)
+        def normalize_model(value):
+            model = str(value or "").strip().upper().replace("_", " ")
+            model = re.sub(r"^RTX[ -]*(\d)", r"RTX \1", model)
+            return model
+        node_models = defaultdict(lambda: defaultdict(float))
+        partition_models = defaultdict(lambda: defaultdict(float))
+        nodes_df = getattr(snapshot, "nodes", None)
+        def read_node_models(frame):
+            found = False
+            if frame is None or frame.is_empty():
+                return found
+            for node in frame.to_dicts():
+                # Accept both the node-inventory schema and raw/capitalized keys.
+                lowered = {str(k).lower(): v for k, v in node.items()}
+                node_name = str(lowered.get("node_name") or lowered.get("nodename") or "").strip()
+                if not node_name:
+                    continue
+                gres = str(lowered.get("gres") or "")
+                gres_used = str(lowered.get("gres_used") or "")
+                partition_names = str(lowered.get("partition") or "").strip()
+                matches = list(node_typed_pattern.finditer(gres))
+                if not matches:
+                    matches = list(node_typed_pattern.finditer(gres_used))
+                for match in matches:
+                    model = normalize_model(match.group(1))
+                    capacity = float(match.group(2))
+                    node_models[node_name.lower()][model] += capacity
+                    for partition_name in partition_names.split(","):
+                        partition_name = partition_name.strip()
+                        if partition_name and partition_name not in ("(null)", "(none)"):
+                            partition_models[partition_name][model] += capacity
+                    cluster_types.add(model)
+                    found = True
+            return found
+        cluster_types = set()
+        read_node_models(nodes_df)
+        # A cached node frame can be stale or lack GRES columns after a worker
+        # restart/version change. Refresh it if no model names were recovered.
+        if not node_models:
+            try:
+                from slurm_analytics.node_inventory import refresh_node_inventory
+                nodes_df = refresh_node_inventory()
+                snapshot.nodes = nodes_df
+                read_node_models(nodes_df)
+            except Exception:
+                pass
+
+        hostname_cache = {}
+        def _expand_hostlist_piece(piece):
+            """Expand common Slurm hostlist ranges locally; avoid one scontrol process per expression."""
+            match = re.search(r"\[([^\[\]]+)\]", piece)
+            if not match:
+                return [piece]
+            prefix, body, suffix = piece[:match.start()], match.group(1), piece[match.end():]
+            values = []
+            for item in body.split(","):
+                item = item.strip()
+                if not item:
+                    continue
+                range_match = re.fullmatch(r"(\d+)-(\d+)(?::(\d+))?", item)
+                if range_match:
+                    first, last = int(range_match.group(1)), int(range_match.group(2))
+                    step = int(range_match.group(3) or 1)
+                    if step < 1 or last < first or last - first > 100000:
+                        continue
+                    width = max(len(range_match.group(1)), len(range_match.group(2)))
+                    values.extend(f"{prefix}{number:0{width}d}{suffix}" for number in range(first, last + 1, step))
+                else:
+                    values.append(f"{prefix}{item}{suffix}")
+            expanded = []
+            for value in values:
+                if "[" in value and "]" in value:
+                    expanded.extend(_expand_hostlist_piece(value))
+                else:
+                    expanded.append(value)
+            return expanded
+
+        def expand_nodelist(expression):
+            expression = str(expression or "").strip()
+            if not expression or expression.lower() in ("(null)", "none", "unknown"):
+                return []
+            if expression in hostname_cache:
+                return hostname_cache[expression]
+            # Slurm hostlists can contain comma-separated bare hosts and bracket ranges.
+            # Split only commas outside brackets so node[01-03,08] stays together.
+            parts, current, depth = [], [], 0
+            for char in expression:
+                if char == "[": depth += 1
+                elif char == "]": depth = max(0, depth - 1)
+                if char == "," and depth == 0:
+                    parts.append("".join(current).strip()); current = []
+                else:
+                    current.append(char)
+            if current: parts.append("".join(current).strip())
+            names = []
+            for part in parts:
+                if part: names.extend(_expand_hostlist_piece(part))
+            # Retain the Slurm command only as a fallback for unusual hostlist syntax.
+            if not names and "[" in expression:
+                try:
+                    result = subprocess.run(["scontrol", "show", "hostnames", expression], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, timeout=5)
+                    if result.returncode == 0:
+                        names = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+                except (OSError, subprocess.SubprocessError):
+                    pass
+            hostname_cache[expression] = names
+            return names
+
+        # Refresh if the cached inventory does not contain one or more nodes
+        # referenced by completed GPU jobs. A non-empty but stale snapshot must
+        # not silently force those jobs into "Unspecified GPU".
+        requested_nodes = set()
+        for job_row in rows.to_dicts():
+            requested_nodes.update(name.lower() for name in expand_nodelist(job_row.get("nodelist")))
+        missing_nodes = requested_nodes.difference(node_models.keys())
+        if missing_nodes:
+            try:
+                from slurm_analytics.node_inventory import refresh_node_inventory
+                fresh_nodes = refresh_node_inventory()
+                # Replace rather than merge: merging would double-count models.
+                node_models.clear()
+                partition_models.clear()
+                cluster_types.clear()
+                nodes_df = fresh_nodes
+                snapshot.nodes = fresh_nodes
+                read_node_models(fresh_nodes)
+            except Exception:
+                pass
+
+        # Last-resort lookup: query Slurm directly for each referenced node.
+        # This avoids depending on a stale/partial dashboard snapshot when the
+        # inventory refresh cannot populate GRES fields for a particular node.
+        unresolved_nodes = requested_nodes.difference(node_models.keys())
+        if unresolved_nodes:
+            try:
+                from slurm_analytics.node_inventory import parse_scontrol_nodes
+                for node_name in sorted(unresolved_nodes):
+                    try:
+                        result = subprocess.run(
+                            ["scontrol", "show", "node", node_name],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            universal_newlines=True,
+                            timeout=8,
+                        )
+                    except (OSError, subprocess.SubprocessError):
+                        continue
+                    if result.returncode == 0 and result.stdout.strip():
+                        read_node_models(parse_scontrol_nodes(result.stdout))
+            except Exception:
+                # GPU usage reporting should remain available even if Slurm's
+                # controller cannot be reached from the web process.
+                pass
+
+        def infer_models(nodelist, gpu_count, partition_name=""):
+            capacities = defaultdict(float)
+            for node_name in expand_nodelist(nodelist):
+                for model, capacity in node_models.get(node_name.lower(), {}).items():
+                    capacities[model] += capacity
+            if not capacities and partition_name:
+                # Some accounting imports omit Nodelist; partition inventory
+                # is the next-best source for a model-specific attribution.
+                for part in str(partition_name).split(","):
+                    for model, capacity in partition_models.get(part.strip(), {}).items():
+                        capacities[model] += capacity
+            if not capacities and len(cluster_types) == 1:
+                return {next(iter(cluster_types)): gpu_count}
+            if not capacities:
+                return {}
+            if len(capacities) == 1:
+                return {next(iter(capacities)): gpu_count}
+            total = sum(capacities.values())
+            return {model: gpu_count * cap / total for model, cap in capacities.items()} if total > 0 else {}
+
+        user_hours = defaultdict(float)
+        account_direct_hours = defaultdict(float)
+        for row in rows.to_dicts():
+            tres = str(row.get("alloctres") or "")
+            allocations = defaultdict(float)
+            for match in typed_pattern.finditer(tres):
+                allocations[normalize_model(match.group(1))] += float(match.group(2))
+            if not allocations:
+                generic = sum(float(m.group(1)) for m in generic_pattern.finditer(tres))
+                if generic > 0:
+                    inferred = infer_models(row.get("nodelist"), generic, row.get("partition_name"))
+                    if inferred:
+                        allocations.update(inferred)
+                    else:
+                        allocations["Unspecified GPU"] += generic
+            if not allocations:
+                continue
+            hours = max(float(row.get("elapsed_seconds") or 0), 0.0) / 3600.0
+            user_name = str(row.get("user_name") or "(Unknown user)")
+            account_name = str(row.get("account_name") or "Unknown")
+            for model, count in allocations.items():
+                cluster_types.add(model)
+                value = count * hours
+                user_hours[(user_name, model)] += value
+                account_direct_hours[(account_name, model)] += value
+
+        # Roll each direct account's per-model GPU-hours into its ancestors so
+        # charts at a given hierarchy depth compare like with like.
+        parents = {str(name): (str(parent) if parent else None) for name, parent, level, path in account_rows if name}
+        levels = {str(name): int(level or 0) for name, parent, level, path in account_rows if name}
+        rolled = defaultdict(float)
+        for (account_name, model), value in account_direct_hours.items():
+            rolled[(account_name, model)] += value
+            parent = parents.get(account_name)
+            seen = {account_name}
+            while parent and parent not in seen:
+                seen.add(parent)
+                rolled[(parent, model)] += value
+                parent = parents.get(parent)
+
+        users = [{"user": name, "gpu_type": model, "gpu_hours": round(value, 4)}
+                 for (name, model), value in sorted(user_hours.items())]
+        accounts = [{"account": name, "parent": parents.get(name), "level": levels.get(name, 0), "gpu_type": model, "gpu_hours": round(value, 4)}
+                    for (name, model), value in sorted(rolled.items())]
+        return JsonResponse({"types": sorted(cluster_types), "users": users, "accounts": accounts}, safe=False)
     except Exception as exc:
         return JsonResponse({"error": str(exc)}, status=500)
 

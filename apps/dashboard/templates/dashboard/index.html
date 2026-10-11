@@ -5,7 +5,7 @@
 <title>Slurm Dashboard</title>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <style>
-body{margin:0;padding:24px;font-family:Arial,sans-serif;background:#f5f7fa;color:#222}h1{margin-top:0}.tabs{display:flex;gap:4px;margin:18px 0}.tab{border:0;background:#ddd;padding:10px 18px;border-radius:6px;cursor:pointer}.tab.active{background:#333;color:#fff}.panel{display:none}.panel.active{display:block}.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:24px}.card,.chart,.tablebox{background:#fff;border-radius:8px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.12)}.card-title{color:#666;font-size:14px}.card-value{font-size:30px;font-weight:bold;margin-top:8px}.toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;background:#fff;padding:12px 16px;border-radius:8px;margin-bottom:20px}.toolbar label{font-weight:600}.toolbar input,.toolbar select,.toolbar button{padding:6px 8px}.muted{color:#666;font-size:13px;margin-left:auto}.hint{color:#666;font-size:13px;width:100%}.charts{display:grid;grid-template-columns:1fr 1fr;gap:20px}.wide{grid-column:1/-1}.chart{min-height:390px}.pie-chart{min-height:430px}.error{color:#b00020;padding:12px}.tablebox{overflow:auto}table{border-collapse:collapse;width:100%;font-size:14px}th,td{text-align:left;padding:8px;border-bottom:1px solid #eee;white-space:nowrap}th{position:sticky;top:0;background:#fafafa}th button{border:0;background:transparent;font:inherit;font-weight:700;cursor:pointer;padding:0}.num{text-align:right}.sort-indicator{color:#666;font-size:11px}.indent{padding-left:calc(8px + var(--level)*20px)}.account-level-group{grid-column:1/-1}.account-level-title{margin:8px 0 0}.account-level-charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.custom-range{display:none}.custom-range.visible{display:inline-flex;gap:8px;align-items:center}.metric-details{background:#fff;border-radius:8px;padding:14px 18px;margin:14px 0;box-shadow:0 1px 4px rgba(0,0,0,.08)}.metric-details>summary{cursor:pointer;font-weight:600}.metric-details .charts{margin-top:16px}.metric-details .cards{margin-top:14px}.loading-indicator{display:none;align-items:center;gap:8px;color:#555;font-size:13px}.loading-indicator.visible{display:inline-flex}.spinner{width:14px;height:14px;border:2px solid #d7dce2;border-top-color:#333;border-radius:50%;display:inline-block;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}button:disabled{opacity:.6;cursor:wait}@media(max-width:1100px){.cards{grid-template-columns:repeat(2,1fr)}.charts,.account-level-charts{grid-template-columns:1fr}.wide,.account-level-group{grid-column:auto}}@media(max-width:700px){body{padding:12px}.cards{grid-template-columns:1fr}.custom-range.visible{width:100%;flex-wrap:wrap}}
+body{margin:0;padding:24px;font-family:Arial,sans-serif;background:#f5f7fa;color:#222}h1{margin-top:0}.tabs{display:flex;gap:4px;margin:18px 0}.tab{border:0;background:#ddd;padding:10px 18px;border-radius:6px;cursor:pointer}.tab.active{background:#333;color:#fff}.panel{display:none}.panel.active{display:block}.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:24px}.card,.chart,.tablebox{background:#fff;border-radius:8px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.12)}.card-title{color:#666;font-size:14px}.card-value{font-size:30px;font-weight:bold;margin-top:8px}.toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;background:#fff;padding:12px 16px;border-radius:8px;margin-bottom:20px}.toolbar label{font-weight:600}.toolbar input,.toolbar select,.toolbar button{padding:6px 8px}.muted{color:#666;font-size:13px;margin-left:auto}.hint{color:#666;font-size:13px;width:100%}.charts{display:grid;grid-template-columns:1fr 1fr;gap:20px}.wide{grid-column:1/-1}.chart{min-height:390px}.pie-chart{min-height:430px}.error{color:#b00020;padding:12px}.tablebox{overflow:auto}table{border-collapse:collapse;width:100%;font-size:14px}th,td{text-align:left;padding:8px;border-bottom:1px solid #eee;white-space:nowrap}th{position:sticky;top:0;background:#fafafa}th button{border:0;background:transparent;font:inherit;font-weight:700;cursor:pointer;padding:0}.num{text-align:right}.sort-indicator{color:#666;font-size:11px}.indent{padding-left:calc(8px + var(--level)*20px)}.account-level-group{grid-column:1/-1}.account-level-title{margin:8px 0 0}.account-level-charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.custom-range{display:none}.custom-range.visible{display:inline-flex;gap:8px;align-items:center}.metric-details{background:#fff;border-radius:8px;padding:14px 18px;margin:14px 0;box-shadow:0 1px 4px rgba(0,0,0,.08)}.metric-details>summary{cursor:pointer;font-weight:600}.metric-details .charts{margin-top:16px}.account-gpu-model-pies{display:block!important;width:100%}.account-gpu-model-pies>.account-level-title{margin:18px 0 8px}.account-gpu-model-pies>.account-level-charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;gap:20px;margin:0 0 18px;justify-items:stretch;align-items:stretch}.account-gpu-model-pies .chart{min-width:0;width:auto;box-sizing:border-box}.account-gpu-model-pies .chart>div{width:100%;min-width:0}.metric-details .cards{margin-top:14px}.loading-indicator{display:none;align-items:center;gap:8px;color:#555;font-size:13px}.loading-indicator.visible{display:inline-flex}.spinner{width:14px;height:14px;border:2px solid #d7dce2;border-top-color:#333;border-radius:50%;display:inline-block;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}button:disabled{opacity:.6;cursor:wait}@media(max-width:1100px){.cards{grid-template-columns:repeat(2,1fr)}.charts,.account-level-charts{grid-template-columns:1fr}.wide,.account-level-group{grid-column:auto}}@media(max-width:700px){body{padding:12px}.cards{grid-template-columns:1fr}.custom-range.visible{width:100%;flex-wrap:wrap}}
 </style>
 </head>
 <body>
@@ -32,7 +32,7 @@ body{margin:0;padding:24px;font-family:Arial,sans-serif;background:#f5f7fa;color
 </section>
 <section id="users" class="panel">
 <div class="toolbar"><label>User <input id="user-filter" placeholder="smith* or *zhang*"></label><label>Account <input id="user-account-filter" placeholder="dept.pi.*"></label><button onclick="loadUsers()">Search</button><span class="muted">Resource values use the selected history range.</span></div>
-<div class="charts"><div class="chart pie-chart"><div id="users-cpu-pie"></div></div><div class="chart pie-chart"><div id="users-gpu-pie"></div></div></div><details id="users-extra-pies" class="metric-details"><summary>Load additional user charts (jobs, nodes, RAM, tasks, data I/O)</summary><div class="charts"><div class="chart pie-chart"><div id="users-jobs-pie"></div></div><div class="chart pie-chart"><div id="users-nodes-pie"></div></div><div class="chart pie-chart"><div id="users-ram-pie"></div></div><div class="chart pie-chart"><div id="users-tasks-pie"></div></div><div class="chart pie-chart"><div id="users-read-pie"></div></div><div class="chart pie-chart"><div id="users-write-pie"></div></div></div></details>
+<div class="charts"><div class="chart pie-chart"><div id="users-cpu-pie"></div></div><div class="chart pie-chart"><div id="users-gpu-pie"></div></div></div><details id="users-gpu-model-details" class="metric-details"><summary>Load GPU model GPU-hours share charts</summary><div class="hint">Each pie compares users’ share of GPU-hours for one GPU model. Models are discovered from current scontrol node inventory and accounting records; generic GPU allocations are inferred from the job node list when possible.</div><div id="users-gpu-model-pies" class="charts"></div></details><details id="users-extra-pies" class="metric-details"><summary>Load additional user charts (jobs, nodes, RAM, tasks, data I/O)</summary><div class="charts"><div class="chart pie-chart"><div id="users-jobs-pie"></div></div><div class="chart pie-chart"><div id="users-nodes-pie"></div></div><div class="chart pie-chart"><div id="users-ram-pie"></div></div><div class="chart pie-chart"><div id="users-tasks-pie"></div></div><div class="chart pie-chart"><div id="users-read-pie"></div></div><div class="chart pie-chart"><div id="users-write-pie"></div></div></div></details>
 <div class="tablebox"><table><thead><tr>
 <th><button onclick="sortUsers('user')">User <span id="sort-user" class="sort-indicator"></span></button></th>
 <th class="num"><button onclick="sortUsers('jobs')">Jobs <span id="sort-jobs" class="sort-indicator"></span></button></th>
@@ -47,6 +47,7 @@ body{margin:0;padding:24px;font-family:Arial,sans-serif;background:#f5f7fa;color
 <div class="toolbar"><label>Account <input id="account-filter" placeholder="dept* or dept.pi.*"></label><button onclick="loadAccounts()">Search</button><span class="muted">“Unknown” means the historical Slurm job accounting record has no account value; it is not a current Slurm account.</span></div>
 <div class="toolbar"><label>Pie metric <select id="account-pie-metric"><option value="jobs">Job count</option><option value="cpu_hours" selected>CPU-hours</option><option value="gpu_hours">GPU-hours</option><option value="memory_gb_hours">Memory GiB-hours</option><option value="elapsed_hours">Elapsed hours</option><option value="total_tasks">Total tasks</option><option value="disk_read_gib">Data read (GiB)</option><option value="disk_write_gib">Data write (GiB)</option></select></label><label>PI filter <select id="pi-dept-filter"><option value="">All departments</option></select></label><label>Project filter <select id="project-pi-filter"><option value="">All PIs</option></select></label><span class="muted">Department and PI charts include descendant projects; project chart shows individual projects.</span></div>
 <div class="charts"><div class="chart pie-chart"><div id="accounts-dept-pie"></div></div><div class="chart pie-chart"><div id="accounts-pi-pie"></div></div><div class="chart pie-chart"><div id="accounts-project-pie"></div></div></div>
+<details id="accounts-gpu-model-details" class="metric-details"><summary>Load GPU model GPU-hours share charts by account level</summary><div class="hint">Each model has separate department, PI, and project-level pies, with account hierarchy totals rolled up from child accounts. GPU models are discovered from current scontrol node inventory and accounting records.</div><div id="accounts-gpu-model-pies" class="account-gpu-model-pies"></div></details>
 <details id="accounts-level-details" class="metric-details"><summary>Load resource usage charts by account hierarchy level</summary><div class="hint">Each level begins on a new line. Charts compare accounts at the same depth; parent and child levels are not mixed. Task totals are summed NTasks across jobs; data-read/data-write are summed MaxDiskRead/MaxDiskWrite in GiB.</div><div id="accounts-level-pies" class="charts"></div></details>
 <div class="tablebox"><table><thead><tr>
 <th><button onclick="sortAccounts('name')">Account <span id="asort-name" class="sort-indicator"></span></button></th><th>Parent</th>
@@ -81,10 +82,38 @@ let renderedGpuDetails=false;
 let renderedAccountLevelPies=false;
 function tabCacheKey(tab){const range=document.getElementById("range").value;const start=document.getElementById("custom-start").value;const end=document.getElementById("custom-end").value;return [range,start,end,tab==="overview"?document.getElementById("interval").value:""].join("|")}
 function markTabLoaded(tab){loadedTabs[tab]=tabCacheKey(tab)}
-function invalidateTabCache(){loadedTabs={};renderedOverviewExtras=false;renderedUsersExtras=false;renderedPartitionExtras=false;renderedGpuDetails=false;renderedAccountLevelPies=false}
+function invalidateTabCache(){gpuUsageCacheKey="";loadedTabs={};renderedOverviewExtras=false;renderedUsersExtras=false;renderedPartitionExtras=false;renderedGpuDetails=false;renderedAccountLevelPies=false}
 function setLoading(active){pendingLoads=Math.max(0,pendingLoads+(active?1:-1));const indicator=document.getElementById("loading-indicator");if(indicator)indicator.classList.toggle("visible",pendingLoads>0);const button=document.getElementById("apply-range");if(button)button.disabled=pendingLoads>0;}
 let lastPartitions=[];
 let lastUsers=[];let lastAccounts=[];
+let lastGpuUsage={types:[],users:[],accounts:[]};let gpuUsageCacheKey="";
+async function loadGpuTypeUsage(start,end){
+  const key=`${start}|${end}`;
+  if(gpuUsageCacheKey===key)return lastGpuUsage;
+  try{lastGpuUsage=await getJSON(`/api/gpu-types/usage/?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);gpuUsageCacheKey=key;}
+  catch(e){lastGpuUsage={types:[],users:[],accounts:[]};gpuUsageCacheKey="";console.warn("Unable to load GPU-hours by type",e)}
+  return lastGpuUsage;
+}
+function setGpuTypeHeaders(tableBodyId,sortKey){
+  const body=document.getElementById(tableBodyId),row=body.closest("table").querySelector("thead tr");
+  row.querySelectorAll("th[data-gpu-type-header]").forEach(el=>el.remove());
+  const base=row.querySelector(`button[onclick="${sortKey}"]`)?.closest("th");if(!base)return;
+  let after=base;
+  for(const type of (lastGpuUsage.types||[])){
+    const th=document.createElement("th");th.className="num";th.dataset.gpuTypeHeader="1";th.dataset.gpuType=type;
+    const button=document.createElement("button");button.type="button";button.textContent=`GPU-hours.${type} `;
+    const indicator=document.createElement("span");indicator.className="sort-indicator";indicator.dataset.gpuSortIndicator="1";button.appendChild(indicator);
+    button.addEventListener("click",()=>sortGpuHoursColumn(tableBodyId,type));th.appendChild(button);after.after(th);after=th;
+  }
+  updateGpuSortIndicators(tableBodyId);
+}
+const gpuColumnSortState={users:{type:null,direction:"desc"},accounts:{type:null,direction:"desc"}};
+function gpuTableKind(bodyId){return bodyId.startsWith("users-")?"users":"accounts"}
+function updateGpuSortIndicators(bodyId){const kind=gpuTableKind(bodyId),state=gpuColumnSortState[kind],body=document.getElementById(bodyId);if(!body)return;const row=body.closest("table").querySelector("thead tr");row.querySelectorAll("[data-gpu-sort-indicator]").forEach(el=>el.textContent="");if(state.type){const th=[...row.querySelectorAll("th[data-gpu-type-header]")].find(el=>el.dataset.gpuType===state.type);const indicator=th&&th.querySelector("[data-gpu-sort-indicator]");if(indicator)indicator.textContent=state.direction==="asc"?"▲":"▼"}}
+function sortGpuHoursColumn(bodyId,type){const kind=gpuTableKind(bodyId),state=gpuColumnSortState[kind];if(state.type===type)state.direction=state.direction==="asc"?"desc":"asc";else{state.type=type;state.direction="desc"}applyGpuHoursSort(bodyId);updateGpuSortIndicators(bodyId)}
+function applyGpuHoursSort(bodyId){const kind=gpuTableKind(bodyId),state=gpuColumnSortState[kind];if(!state.type)return;const body=document.getElementById(bodyId);if(!body)return;const row=body.closest("table").querySelector("thead tr"),headers=[...row.querySelectorAll("th")],index=headers.findIndex(th=>th.dataset.gpuType===state.type);if(index<0)return;const rows=[...body.querySelectorAll("tr")];rows.sort((a,b)=>{const av=Number((a.cells[index]?.textContent||"").replace(/,/g,""))||0,bv=Number((b.cells[index]?.textContent||"").replace(/,/g,""))||0;return state.direction==="asc"?av-bv:bv-av});for(const tr of rows)body.appendChild(tr)}
+function gpuTypeHoursMap(rows,keyField){const map=new Map();for(const row of rows||[]){const key=String(row[keyField]||"");if(!map.has(key))map.set(key,{});map.get(key)[row.gpu_type]=Number(row.gpu_hours||0)}return map}
+function gpuTypeCells(map,key){const item=map.get(String(key||""))||{};return (lastGpuUsage.types||[]).map(type=>`<td class="num">${fmt(item[type]||0)}</td>`).join("")}
 async function getJSON(url){const r=await fetch(url);if(!r.ok)throw new Error(`${url}: HTTP ${r.status} ${await r.text()}`);return r.json()}
 function rangeStart(v){const now=new Date(),ms={"24h":864e5,"7d":7*864e5,"30d":30*864e5,"90d":90*864e5,"180d":180*864e5,"1y":365*864e5}[v];return new Date(now-ms)}
 function toISOInput(v){const d=new Date(v);d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,16)}
@@ -176,18 +205,66 @@ async function loadOverview(){
   }catch(e){document.getElementById("error").textContent="Unable to load dashboard: "+e.message}finally{setLoading(false)}
 }
 function renderUsersExtraPies(){if(renderedUsersExtras||!lastUsers.length)return;renderPie("users-jobs-pie",lastUsers,"jobs","user","Users: job-count share");renderPie("users-nodes-pie",lastUsers,"allocated_nodes","user","Users: allocated-node share");renderPie("users-ram-pie",lastUsers,"memory_gb_hours","user","Users: RAM usage share (GiB-hours)");renderPie("users-tasks-pie",lastUsers,"total_tasks","user","Users: task-count share (sum of NTasks)");renderPie("users-read-pie",lastUsers,"disk_read_gib","user","Users: data-read share (MaxDiskRead, GiB)");renderPie("users-write-pie",lastUsers,"disk_write_gib","user","Users: data-write share (MaxDiskWrite, GiB)");renderedUsersExtras=true}
-async function loadUsers(){setLoading(true);try{const {start,end}=getRange(),u=document.getElementById("user-filter").value,a=document.getElementById("user-account-filter").value;lastUsers=await getJSON(`/api/users/usage/?user=${encodeURIComponent(u)}&account=${encodeURIComponent(a)}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&limit=10000&sort=${encodeURIComponent(userSort.sort)}&direction=${userSort.direction}`);document.getElementById("users-body").innerHTML=lastUsers.map(r=>`<tr><td>${safe(r.user)}</td><td class="num">${fmt(r.jobs)}</td><td class="num">${fmt(r.allocated_nodes)}</td><td class="num">${fmt(r.cpu_hours)}</td><td class="num">${fmt(r.gpu_hours)}</td><td class="num">${fmt(r.memory_gb_hours)}</td><td class="num">${fmt(r.gpu_memory_gb)}</td><td class="num">${fmt(r.total_tasks)}</td><td class="num">${fmt(r.disk_read_gib)}</td><td class="num">${fmt(r.disk_write_gib)}</td></tr>`).join("");renderPie("users-cpu-pie",lastUsers,"cpu_hours","user","Users: CPU-hour share");renderPie("users-gpu-pie",lastUsers,"gpu_hours","user","Users: GPU-hour share");renderedUsersExtras=false;if(document.getElementById("users-extra-pies").open)renderUsersExtraPies();updateSortIndicators("sort-",userSort);markTabLoaded("users")}catch(e){document.getElementById("error").textContent="Unable to load users: "+e.message}finally{setLoading(false)}}
+async function loadUsersGpuModelPies(){
+  const holder=document.getElementById("users-gpu-model-pies");if(holder.dataset.loadedFor===tabCacheKey("users"))return;
+  holder.innerHTML="<p class=\"muted\">Loading GPU model usage…</p>";
+  try{
+    const {start,end}=getRange();
+    const data=await getJSON(`/api/gpu-types/usage/?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
+    const names=new Set(lastUsers.map(r=>String(r.user)));
+    const rows=(data.users||[]).filter(r=>names.has(String(r.user)));
+    holder.innerHTML="";
+    const types=data.types||[];
+    if(!types.length){holder.innerHTML="<p>No GPU model information is available from node inventory or job accounting.</p>";return}
+    for(const type of types){
+      const byUser=new Map();for(const row of rows.filter(r=>r.gpu_type===type)){if(!byUser.has(row.user))byUser.set(row.user,{user:row.user,gpu_hours:0});byUser.get(row.user).gpu_hours+=Number(row.gpu_hours||0)}
+      const box=document.createElement("div");box.className="chart pie-chart";const id="users-gpu-model-"+type.replace(/[^a-zA-Z0-9_-]/g,"-");const target=document.createElement("div");target.id=id;box.appendChild(target);holder.appendChild(box);
+      const values=[...byUser.values()];if(values.reduce((sum,r)=>sum+r.gpu_hours,0)>0)renderPie(id,values,"gpu_hours","user",`${type}: GPU-hours share by user`);else Plotly.react(id,[],{title:`${type}: GPU-hours share by user (no usage in selected range)`,annotations:[{text:"No GPU-hours in selected range",xref:"paper",yref:"paper",x:.5,y:.5,showarrow:false}],xaxis:{visible:false},yaxis:{visible:false},margin:{l:10,r:10,t:60,b:10}},{responsive:true});
+    }
+    holder.dataset.loadedFor=tabCacheKey("users");
+  }catch(e){holder.innerHTML=`<p class=\"error\">Unable to load GPU model usage: ${safe(e.message)}</p>`}
+}
+async function loadAccountsGpuModelPies(){
+  const holder=document.getElementById("accounts-gpu-model-pies");if(holder.dataset.loadedFor===tabCacheKey("accounts"))return;
+  holder.innerHTML="<p class=\"muted\">Loading GPU model usage…</p>";
+  try{
+    const {start,end}=getRange();const data=await getJSON(`/api/gpu-types/usage/?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
+    const rows=accountDepths(lastAccounts),filter=document.getElementById("account-filter").value.trim();
+    const visible=hierarchicalAccounts(lastAccounts,filter),visibleNames=new Set(visible.map(r=>String(r.account)));
+    const usage=data.accounts||[],types=data.types||[];holder.innerHTML="";
+    if(!types.length){holder.innerHTML="<p>No GPU model information is available from node inventory or job accounting.</p>";return}
+    const labels={0:"Departments",1:"PIs",2:"Projects"};
+    const maxDepth=rows.reduce((m,r)=>Math.max(m,r._depth),0);
+    for(const type of types){
+      const heading=document.createElement("h3");heading.className="account-level-title";heading.textContent=`${type} GPU-hours share`;holder.appendChild(heading);
+      const chartRow=document.createElement("div");chartRow.className="account-level-charts";holder.appendChild(chartRow);
+      for(let depth=0;depth<=maxDepth;depth++){
+        const atLevel=rows.filter(r=>r._depth===depth&&visibleNames.has(String(r.account)));if(!atLevel.length)continue;
+        const byAccount=new Map();for(const row of usage){if(row.gpu_type!==type||!atLevel.some(a=>String(a.account)===String(row.account)))continue;if(!byAccount.has(row.account))byAccount.set(row.account,{account:row.account,gpu_hours:0});byAccount.get(row.account).gpu_hours+=Number(row.gpu_hours||0)}
+        const values=[...byAccount.values()];const box=document.createElement("div");box.className="chart pie-chart";const id="accounts-gpu-model-"+type.replace(/[^a-zA-Z0-9_-]/g,"-")+"-depth-"+depth;const target=document.createElement("div");target.id=id;box.appendChild(target);chartRow.appendChild(box);
+        const levelName=labels[depth]||`Level ${depth+1}`;if(values.reduce((sum,r)=>sum+r.gpu_hours,0)>0)renderPie(id,values,"gpu_hours","account",`${type}: ${levelName} GPU-hours share`);else Plotly.react(id,[],{title:`${type}: ${levelName} GPU-hours share (no usage in selected range)`,annotations:[{text:"No GPU-hours in selected range",xref:"paper",yref:"paper",x:.5,y:.5,showarrow:false}],xaxis:{visible:false},yaxis:{visible:false},margin:{l:10,r:10,t:60,b:10}},{responsive:true});
+      }
+    }
+    holder.dataset.loadedFor=tabCacheKey("accounts");
+  }catch(e){holder.innerHTML=`<p class=\"error\">Unable to load GPU model usage: ${safe(e.message)}</p>`}
+}
+async function loadUsers(){const gpuHolder=document.getElementById("users-gpu-model-pies");if(gpuHolder)delete gpuHolder.dataset.loadedFor;setLoading(true);try{const {start,end}=getRange(),u=document.getElementById("user-filter").value,a=document.getElementById("user-account-filter").value;lastUsers=await getJSON(`/api/users/usage/?user=${encodeURIComponent(u)}&account=${encodeURIComponent(a)}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&limit=10000&sort=${encodeURIComponent(userSort.sort)}&direction=${userSort.direction}`);await loadGpuTypeUsage(start,end);const gpuMap=gpuTypeHoursMap(lastGpuUsage.users,"user");setGpuTypeHeaders("users-body","sortUsers('gpu_hours')");document.getElementById("users-body").innerHTML=lastUsers.map(r=>`<tr><td>${safe(r.user)}</td><td class="num">${fmt(r.jobs)}</td><td class="num">${fmt(r.allocated_nodes)}</td><td class="num">${fmt(r.cpu_hours)}</td><td class="num">${fmt(r.gpu_hours)}</td>${gpuTypeCells(gpuMap,r.user)}<td class="num">${fmt(r.memory_gb_hours)}</td><td class="num">${fmt(r.gpu_memory_gb)}</td><td class="num">${fmt(r.total_tasks)}</td><td class="num">${fmt(r.disk_read_gib)}</td><td class="num">${fmt(r.disk_write_gib)}</td></tr>`).join("");renderPie("users-cpu-pie",lastUsers,"cpu_hours","user","Users: CPU-hour share");renderPie("users-gpu-pie",lastUsers,"gpu_hours","user","Users: GPU-hour share");renderedUsersExtras=false;if(document.getElementById("users-extra-pies").open)renderUsersExtraPies();updateSortIndicators("sort-",userSort);applyGpuHoursSort("users-body");updateGpuSortIndicators("users-body");markTabLoaded("users")}catch(e){document.getElementById("error").textContent="Unable to load users: "+e.message}finally{setLoading(false)}}
 async function loadAccounts(){
+  const gpuHolder=document.getElementById("accounts-gpu-model-pies");if(gpuHolder)delete gpuHolder.dataset.loadedFor;
   setLoading(true);
   try{
     const {start,end}=getRange(),filter=document.getElementById("account-filter").value.trim();
     const tree=await getJSON(`/api/accounts/tree/?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&sort=name&direction=asc`);
+    await loadGpuTypeUsage(start,end);
+    const gpuMap=gpuTypeHoursMap(lastGpuUsage.accounts,"account");
+    setGpuTypeHeaders("accounts-body","sortAccounts('gpu_hours')");
     lastAccounts=tree;
     const visible=hierarchicalAccounts(tree,filter);
-    document.getElementById("accounts-body").innerHTML=visible.map(r=>`<tr><td class="indent" style="--level:${Number(r.display_level||0)}">${safe(r.account)}</td><td>${safe(r.display_parent||"")}</td><td class="num">${fmt(r.jobs)}</td><td class="num">${fmt(r.allocated_nodes)}</td><td class="num">${fmt(r.cpu_hours)}</td><td class="num">${fmt(r.gpu_hours)}</td><td class="num">${fmt(r.memory_gb_hours)}</td><td class="num">${fmt(r.gpu_memory_gb)}</td><td class="num">${fmt(r.total_tasks)}</td><td class="num">${fmt(r.disk_read_gib)}</td><td class="num">${fmt(r.disk_write_gib)}</td></tr>`).join("");
+    document.getElementById("accounts-body").innerHTML=visible.map(r=>`<tr><td class="indent" style="--level:${Number(r.display_level||0)}">${safe(r.account)}</td><td>${safe(r.display_parent||"")}</td><td class="num">${fmt(r.jobs)}</td><td class="num">${fmt(r.allocated_nodes)}</td><td class="num">${fmt(r.cpu_hours)}</td><td class="num">${fmt(r.gpu_hours)}</td>${gpuTypeCells(gpuMap,r.account)}<td class="num">${fmt(r.memory_gb_hours)}</td><td class="num">${fmt(r.gpu_memory_gb)}</td><td class="num">${fmt(r.total_tasks)}</td><td class="num">${fmt(r.disk_read_gib)}</td><td class="num">${fmt(r.disk_write_gib)}</td></tr>`).join("");
     updateAccountPieFilters();
     renderedAccountLevelPies=false;
     renderAccountPies();
+    applyGpuHoursSort("accounts-body");updateGpuSortIndicators("accounts-body");
     updateSortIndicators("asort-",accountSort);markTabLoaded("accounts");
   }catch(e){document.getElementById("error").textContent="Unable to load accounts: "+e.message}finally{setLoading(false)}
 }
@@ -320,6 +397,8 @@ document.getElementById("pi-dept-filter").addEventListener("change",()=>{updateA
 document.getElementById("project-pi-filter").addEventListener("change",renderAccountPies);
 document.getElementById("overview-extra-charts").addEventListener("toggle",e=>{if(e.target.open)renderOverviewExtraCharts()});
 document.getElementById("users-extra-pies").addEventListener("toggle",e=>{if(e.target.open)renderUsersExtraPies()});
+document.getElementById("users-gpu-model-details").addEventListener("toggle",e=>{if(e.target.open)loadUsersGpuModelPies()});
+document.getElementById("accounts-gpu-model-details").addEventListener("toggle",e=>{if(e.target.open)loadAccountsGpuModelPies()});
 document.getElementById("accounts-level-details").addEventListener("toggle",e=>{if(e.target.open)renderAccountLevelPies(accountDepths(lastAccounts))});
 document.getElementById("partition-extra-pies").addEventListener("toggle",e=>{if(e.target.open)renderPartitionExtraPies()});
 document.getElementById("partition-gpu-details").addEventListener("toggle",e=>{if(e.target.open)loadPartitionGpuDetails()});

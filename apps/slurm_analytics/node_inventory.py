@@ -1,6 +1,7 @@
 from __future__ import print_function
 
 import os
+import re
 import subprocess
 
 from datetime import datetime
@@ -88,12 +89,16 @@ def parse_scontrol_nodes(
             datetime.now(UTC)
         )
 
+    # `scontrol show node -a` output is not guaranteed to separate nodes
+    # with blank lines. On many Slurm versions each node starts on a new line,
+    # and splitting only on blank lines merges every node into one record.
+    # Split before each NodeName= token while preserving wrapped continuation
+    # lines belonging to the preceding node.
+    normalized = (output or "").replace("\r", "\n")
     blocks = [
         block.strip()
-        for block in output.split(
-            "\n\n"
-        )
-        if block.strip()
+        for block in re.split(r"(?=\bNodeName=)", normalized)
+        if block.strip() and re.search(r"\bNodeName=", block)
     ]
 
     rows = []
