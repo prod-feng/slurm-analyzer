@@ -11,7 +11,6 @@ mytest*
 nohup.out
 *.yaml
 *json
-apps/
 data/slurm.duckdb
 apps/rawdata
 *.zip
