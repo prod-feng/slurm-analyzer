@@ -103,3 +103,23 @@ To make the exact ``slurm-analytics report ...`` command available:
     python -m pip install -e /workspace
 
 Or add ``/workspace`` to PATH to use the bundled ``/workspace/slurm-analytics`` wrapper.
+
+
+Import multiple historical sacct files
+--------------------------------------
+The initialize_slurm command accepts multiple files in one invocation. If the
+files were created by collect_sacct.py, keep the adjacent .out.json metadata
+sidecars so the importer can map each file's recorded --format fields safely.
+For example, in the application container:
+
+    python manage.py initialize_slurm --history-file /data/part-1.out /data/part-2.out --no-accounts
+
+Shell wildcards also work when expanded by the shell, for example:
+
+    python manage.py initialize_slurm --history-file /data/*.out --no-accounts
+
+Files may overlap; the database ingestion uses record-key upserts. The
+--start/--end options mark initialization metadata but do not filter records
+inside supplied history files.
+
+Historical import diagnostics: `python manage.py initialize_slurm --history-file "rawdata/*.out"` prints compact warnings for rows with unexpected field counts. Add `--verbose` to print raw suspicious rows (up to 50 per file) for troubleshooting.
