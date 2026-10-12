@@ -1030,7 +1030,10 @@ def api_timeseries(request):
 
 @require_GET
 def api_queue(request):
-    """Return the live queue from squeue; this is not part of the cached snapshot."""
+    """Return the live queue from squeue; remote file-import clusters have no local queue."""
+    cluster = getattr(request, "slurm_cluster", {})
+    if cluster.get("mode", "live") != "live":
+        return JsonResponse({"status": "unavailable", "error": "Live queue is disabled for file-import clusters."}, status=503)
     try:
         df = fetch_squeue()
     except Exception as exc:
@@ -1040,7 +1043,10 @@ def api_queue(request):
 
 @require_POST
 def api_refresh(request):
-    """Build and atomically publish a new snapshot."""
+    """Build and atomically publish a new snapshot for live-connected clusters."""
+    cluster = getattr(request, "slurm_cluster", {})
+    if cluster.get("mode", "live") != "live":
+        return JsonResponse({"status": "unavailable", "error": "Live refresh is disabled for file-import clusters; import updated history files instead."}, status=403)
     config = SacctConfig(
         clusters=request.POST.get("clusters", "all"),
         start=request.POST.get("start") or None,

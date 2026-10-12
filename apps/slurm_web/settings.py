@@ -12,7 +12,7 @@ ALLOWED_HOSTS = [
     "127.0.0.1",
     "localhost",
     "172.17.120.8",
-    "10.10.10.221",
+    "10.10.10.211",
 ]
 
 
@@ -33,6 +33,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "webapp.slurm.middleware.ClusterDatabaseMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",

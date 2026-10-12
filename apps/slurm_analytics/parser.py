@@ -349,27 +349,31 @@ def parse_gpu_count(value):
 
     parsed = parse_tres(value)
 
-# The generic GPU count is the total; typed counts describe the
-# same allocation and must not be added to it.
-    generic = parsed.get("gres/gpu")
-    if generic is not None:
-        try:
-            return float(generic)
-        except (ValueError, TypeError):
-            pass
-# Older records may contain only model-specific GPU counts.
     total = 0.0
     found = False
 
     for key, val in parsed.items():
-        if key.startswith("gres/gpu:"):
-            try:
-                total += float(val)
-                found = True
-            except (ValueError, TypeError):
-                continue
 
-    return total if found else None
+        if not (
+            key == "gres/gpu"
+            or key.startswith("gres/gpu:")
+        ):
+            continue
+
+        try:
+            total += float(val)
+            found = True
+
+        except (
+            ValueError,
+            TypeError,
+        ):
+            continue
+
+    if not found:
+        return None
+
+    return total
 
 
 def parse_gpu_utilization(value):

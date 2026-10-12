@@ -177,16 +177,26 @@ def parse_scontrol_nodes(
     )
 
 
-def refresh_node_inventory(
-    nodes=None,
-):
-    output = (
-        run_scontrol_show_node(
-            nodes
-        )
-    )
+def refresh_node_inventory(nodes=None):
+    # Imported/remote clusters must use their own persisted node inventory;
+    # querying scontrol here would incorrectly read the web host's local cluster.
+    try:
+        from slurm_analytics.storage import current_cluster_mode, load_node_inventory
+        if current_cluster_mode() == "import":
+            # Do not fall back to the web host's local scontrol if the imported
+            # inventory is absent; that would silently mix cluster metadata.
+            return load_node_inventory()
+    except Exception:
+        if current_cluster_mode() == "import":
+            return pl.DataFrame()
 
-    return parse_scontrol_nodes(
-        output
-    )
+    output = run_scontrol_show_node(nodes)
+    frame = parse_scontrol_nodes(output)
+    try:
+        from slurm_analytics.storage import replace_node_inventory
+        replace_node_inventory(frame)
+    except Exception:
+        # Inventory refresh should not break the dashboard if persistence fails.
+        pass
+    return frame
 

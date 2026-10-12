@@ -136,3 +136,20 @@ class SlurmState(object):
 
 
 state = SlurmState()
+
+
+# Keep an independent persisted/in-memory snapshot for every cluster database.
+_STATES = {}
+_STATES_LOCK = threading.RLock()
+
+def state_for_database(database_path):
+    """Return a snapshot state isolated to the given DuckDB file."""
+    db_path = Path(database_path).expanduser().resolve()
+    with _STATES_LOCK:
+        existing = _STATES.get(str(db_path))
+        if existing is not None:
+            return existing
+        snapshot_path = db_path.with_suffix(db_path.suffix + ".snapshot.pkl")
+        selected = SlurmState(path=snapshot_path)
+        _STATES[str(db_path)] = selected
+        return selected

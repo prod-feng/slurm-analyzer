@@ -4,15 +4,40 @@ from __future__ import annotations
 import hashlib
 import os
 from pathlib import Path
+from contextvars import ContextVar
 
 import duckdb
 import polars as pl
 
 DEFAULT_DB_PATH = Path(__file__).resolve().parents[1] / "data" / "slurm.duckdb"
+_CURRENT_DB_PATH = ContextVar("slurm_duckdb_path", default=None)
+_CURRENT_CLUSTER_MODE = ContextVar("slurm_cluster_mode", default=None)
+
+
+def set_current_database_path(path):
+    """Set the DuckDB path for the current request/context; return reset token."""
+    return _CURRENT_DB_PATH.set(str(path) if path else None)
+
+
+def reset_current_database_path(token):
+    _CURRENT_DB_PATH.reset(token)
+
+
+def set_current_cluster_mode(mode):
+    return _CURRENT_CLUSTER_MODE.set(str(mode or "").lower() or None)
+
+
+def reset_current_cluster_mode(token):
+    _CURRENT_CLUSTER_MODE.reset(token)
+
+
+def current_cluster_mode():
+    return _CURRENT_CLUSTER_MODE.get()
 
 
 def database_path(path=None):
-    return Path(path or os.environ.get("SLURM_DUCKDB_PATH") or DEFAULT_DB_PATH)
+    selected = path or _CURRENT_DB_PATH.get() or os.environ.get("SLURM_DUCKDB_PATH") or DEFAULT_DB_PATH
+    return Path(selected)
 
 
 def connect(path=None):
@@ -228,6 +253,51 @@ def replace_accounts(accounts, associations, path=None):
                 "INSERT INTO association_history(snapshot_time,association_key,cluster,account_name,user_name) VALUES (current_timestamp, ?, ?, ?, ?)",
                 values,
             )
+    finally:
+        con.close()
+
+
+
+def replace_node_inventory(nodes, path=None):
+    """Persist this cluster's scontrol node inventory in its DuckDB file."""
+    con = connect(path)
+    try:
+        ensure_metadata(con)
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS node_inventory (
+                node_name VARCHAR PRIMARY KEY,
+                state VARCHAR, partition VARCHAR, cpu_alloc VARCHAR,
+                cpu_total VARCHAR, real_memory VARCHAR, alloc_memory VARCHAR,
+                free_memory VARCHAR, gres VARCHAR, gres_used VARCHAR,
+                feature VARCHAR, active_features VARCHAR, collected_at TIMESTAMP
+            )
+        """)
+        con.execute("DELETE FROM node_inventory")
+        if nodes is not None and not nodes.is_empty():
+            wanted = ["node_name", "state", "partition", "cpu_alloc", "cpu_total",
+                      "real_memory", "alloc_memory", "free_memory", "gres", "gres_used",
+                      "feature", "active_features", "collected_at"]
+            available = set(nodes.columns)
+            rows = []
+            for row in nodes.to_dicts():
+                rows.append(tuple(None if row.get(col) is None else str(row.get(col)) for col in wanted))
+            con.executemany(
+                "INSERT OR REPLACE INTO node_inventory VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRY_CAST(? AS TIMESTAMP))",
+                rows,
+            )
+        set_metadata(con, "nodes_imported", "true")
+    finally:
+        con.close()
+
+
+def load_node_inventory(path=None):
+    """Load this cluster's saved node inventory, or return an empty frame."""
+    con = connect(path)
+    try:
+        tables = {row[0] for row in con.execute("SHOW TABLES").fetchall()}
+        if "node_inventory" not in tables:
+            return pl.DataFrame()
+        return fetch_polars_old(con, "SELECT * FROM node_inventory ORDER BY node_name")
     finally:
         con.close()
 

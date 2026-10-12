@@ -6,6 +6,7 @@ from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
 import glob
+import json
 import os
 
 from django.core.management.base import BaseCommand
@@ -138,6 +139,18 @@ class Command(BaseCommand):
             metavar="FILE",
             help="Read one or more raw sacct output files instead of running sacct (for example: --history-file history1.out history2.out)",
         )
+        parser.add_argument(
+            "--accounts-file",
+            default=None,
+            metavar="JSON",
+            help="Import account hierarchy and associations from an exported JSON file",
+        )
+        parser.add_argument(
+            "--nodes-file",
+            default=None,
+            metavar="JSON",
+            help="Import node inventory from JSON produced by the standalone Slurm exporter",
+        )
 
     def handle(self, *args, **options):
         start = parse_dt(options["start"])
@@ -258,22 +271,59 @@ class Command(BaseCommand):
 
                 cursor = chunk_end
 
-        # Refresh account hierarchy unless explicitly disabled.
-        if not options["no_accounts"]:
+        # Persist each cluster's account hierarchy in its own DuckDB. For a
+        # remote cluster, import an export collected on a host with its own
+        # sacctmgr access instead of querying the local cluster by accident.
+        accounts_file = options.get("accounts_file")
+        if accounts_file:
+            try:
+                with open(accounts_file, "r", encoding="utf-8") as handle:
+                    account_data = json.load(handle)
+                accounts = [tuple(row) for row in account_data.get("accounts", [])]
+                associations = [tuple(row) for row in account_data.get("associations", [])]
+                if not accounts and not associations:
+                    raise ValueError("JSON contains no accounts or associations")
+                replace_accounts(accounts, associations)
+            except (OSError, ValueError, TypeError, KeyError) as exc:
+                raise self.CommandError("Unable to import accounts file {}: {}".format(accounts_file, exc))
+            self.stdout.write(self.style.SUCCESS(
+                "Imported accounts={} associations={} from {}".format(
+                    len(accounts), len(associations), accounts_file
+                )
+            ))
+        elif not options["no_accounts"]:
             self.stdout.write("Refreshing Slurm account hierarchy...")
-
             accounts = add_hierarchy(fetch_accounts())
             associations = fetch_associations()
             replace_accounts(accounts, associations)
+            self.stdout.write(self.style.SUCCESS(
+                "  accounts={} associations={}".format(len(accounts), len(associations))
+            ))
 
-            self.stdout.write(
-                self.style.SUCCESS(
-                    "  accounts={} associations={}".format(
-                        len(accounts),
-                        len(associations),
-                    )
-                )
-            )
+        nodes_file = options.get("nodes_file")
+        if nodes_file:
+            try:
+                with open(nodes_file, "r", encoding="utf-8") as handle:
+                    node_data = json.load(handle)
+                raw_nodes = node_data.get("scontrol_output", "") if isinstance(node_data, dict) else ""
+                if not raw_nodes.strip():
+                    raise ValueError("JSON contains no scontrol_output")
+                from slurm_analytics.node_inventory import parse_scontrol_nodes
+                from slurm_analytics.storage import replace_node_inventory
+                node_frame = parse_scontrol_nodes(raw_nodes)
+                if node_frame.is_empty():
+                    raise ValueError("No nodes could be parsed from scontrol output")
+                replace_node_inventory(node_frame)
+                con = connect()
+                try:
+                    set_metadata(con, "cluster_mode", "import")
+                finally:
+                    con.close()
+            except (OSError, ValueError, TypeError, KeyError) as exc:
+                raise self.CommandError("Unable to import node inventory {}: {}".format(nodes_file, exc))
+            self.stdout.write(self.style.SUCCESS(
+                "Imported node inventory: {} nodes from {}".format(node_frame.height, nodes_file)
+            ))
 
         # Mark initialization complete.
         con = connect()

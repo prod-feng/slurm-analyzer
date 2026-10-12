@@ -22,7 +22,7 @@ from slurm_analytics.storage import (
     database_path,
 )
 
-from .state import SlurmSnapshot, state
+from .state import SlurmSnapshot, state_for_database
 import logging
 
 logger = logging.getLogger(__name__)
@@ -152,7 +152,7 @@ def refresh_slurm(sacct_config=None, refresh_nodes=True):
         nodes=nodes,
         refreshed_at=datetime.now(UTC),
     )
-    state.replace(snapshot)
+    state_for_database(database_path()).replace(snapshot)
     return snapshot
 
 
@@ -215,9 +215,15 @@ def _build_snapshot_from_db():
 
 
 def get_snapshot():
-    """Return the current snapshot, recovering from DuckDB if needed."""
+    """Return this cluster's snapshot, recovering from its DuckDB if needed."""
     try:
-        return state.get_or_build(_build_snapshot_from_db)
+        snapshot = state_for_database(database_path()).get_or_build(_build_snapshot_from_db)
+        # Imported clusters always use the node metadata stored in their own
+        # DuckDB, even if a prior snapshot pickle contains another inventory.
+        from slurm_analytics.storage import current_cluster_mode, load_node_inventory
+        if snapshot is not None and current_cluster_mode() == "import":
+            snapshot.nodes = load_node_inventory()
+        return snapshot
     except Exception:
         logger.exception("Unable to rebuild Slurm snapshot from DuckDB.")
         return None
