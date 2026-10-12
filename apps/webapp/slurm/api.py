@@ -573,7 +573,9 @@ def api_gpu_type_usage(request):
     """Return GPU-hours by GPU model for each user and account hierarchy node.
 
     Explicit AllocTRES model names take precedence. Generic GPU counts are
-    attributed using the current scontrol node inventory when possible.
+    attributed using the node inventory already present in the dashboard
+    snapshot. This request handler deliberately does not call scontrol or
+    refresh node inventory: those are refresh-time operations, not HTTP work.
     """
     snapshot, response = _snapshot_or_response()
     if response:
@@ -582,7 +584,6 @@ def api_gpu_type_usage(request):
     from datetime import datetime, timedelta, timezone
     from collections import defaultdict
     import re
-    import subprocess
     from slurm_analytics.storage import connect
 
     now = datetime.now(timezone.utc)
@@ -603,8 +604,6 @@ def api_gpu_type_usage(request):
 
         user_expr = "COALESCE(NULLIF(TRIM(CAST(\"user\" AS VARCHAR)), ''), '(Unknown user)')" if "user" in cols else "'(Unknown user)'"
         account_expr = "COALESCE(NULLIF(TRIM(CAST(account AS VARCHAR)), ''), 'Unknown')" if "account" in cols else "'Unknown'"
-        # Accounting imports may use a different spelling for the node list.
-        # Prefer the canonical Slurm field, but support common normalized aliases.
         nodelist_col = next((name for name in ("nodelist", "node_list", "nodes") if name in cols), None)
         nodelist_expr = "COALESCE(CAST(\"{}\" AS VARCHAR), '')".format(nodelist_col) if nodelist_col else "''"
         partition_expr = "COALESCE(CAST(partition AS VARCHAR), '')" if "partition" in cols else "''"
@@ -620,22 +619,18 @@ def api_gpu_type_usage(request):
 
         typed_pattern = re.compile(r"(?:gres/)?gpu:([^=,:]+)(?::[^=,]+)?=([0-9]+(?:\.[0-9]+)?)", re.I)
         generic_pattern = re.compile(r"(?:gres/)?gpu=([0-9]+(?:\.[0-9]+)?)", re.I)
-        # Slurm GRES strings vary: examples include gpu:h200:8,
-        # gpu:h200:8(S:0-7), gpu:rtx6000:4 and comma-separated variants.
         node_typed_pattern = re.compile(r"gpu:([^:,()\s]+):([0-9]+)(?=\(|,|\s|$)", re.I)
+
         def normalize_model(value):
             model = str(value or "").strip().upper().replace("_", " ")
-            model = re.sub(r"^RTX[ -]*(\d)", r"RTX \1", model)
-            return model
+            return re.sub(r"^RTX[ -]*(\d)", r"RTX \1", model)
+
         node_models = defaultdict(lambda: defaultdict(float))
         partition_models = defaultdict(lambda: defaultdict(float))
+        cluster_types = set()
         nodes_df = getattr(snapshot, "nodes", None)
-        def read_node_models(frame):
-            found = False
-            if frame is None or frame.is_empty():
-                return found
-            for node in frame.to_dicts():
-                # Accept both the node-inventory schema and raw/capitalized keys.
+        if nodes_df is not None and not nodes_df.is_empty():
+            for node in nodes_df.to_dicts():
                 lowered = {str(k).lower(): v for k, v in node.items()}
                 node_name = str(lowered.get("node_name") or lowered.get("nodename") or "").strip()
                 if not node_name:
@@ -655,24 +650,11 @@ def api_gpu_type_usage(request):
                         if partition_name and partition_name not in ("(null)", "(none)"):
                             partition_models[partition_name][model] += capacity
                     cluster_types.add(model)
-                    found = True
-            return found
-        cluster_types = set()
-        read_node_models(nodes_df)
-        # A cached node frame can be stale or lack GRES columns after a worker
-        # restart/version change. Refresh it if no model names were recovered.
-        if not node_models:
-            try:
-                from slurm_analytics.node_inventory import refresh_node_inventory
-                nodes_df = refresh_node_inventory()
-                snapshot.nodes = nodes_df
-                read_node_models(nodes_df)
-            except Exception:
-                pass
 
+        # Expand Slurm hostlists locally only when generic GPU allocations need
+        # model inference. Most typed AllocTRES rows do not need node processing.
         hostname_cache = {}
         def _expand_hostlist_piece(piece):
-            """Expand common Slurm hostlist ranges locally; avoid one scontrol process per expression."""
             match = re.search(r"\[([^\[\]]+)\]", piece)
             if not match:
                 return [piece]
@@ -689,9 +671,9 @@ def api_gpu_type_usage(request):
                     if step < 1 or last < first or last - first > 100000:
                         continue
                     width = max(len(range_match.group(1)), len(range_match.group(2)))
-                    values.extend(f"{prefix}{number:0{width}d}{suffix}" for number in range(first, last + 1, step))
+                    values.extend("{}{}{}".format(prefix, str(number).zfill(width), suffix) for number in range(first, last + 1, step))
                 else:
-                    values.append(f"{prefix}{item}{suffix}")
+                    values.append("{}{}{}".format(prefix, item, suffix))
             expanded = []
             for value in values:
                 if "[" in value and "]" in value:
@@ -706,76 +688,25 @@ def api_gpu_type_usage(request):
                 return []
             if expression in hostname_cache:
                 return hostname_cache[expression]
-            # Slurm hostlists can contain comma-separated bare hosts and bracket ranges.
-            # Split only commas outside brackets so node[01-03,08] stays together.
             parts, current, depth = [], [], 0
             for char in expression:
-                if char == "[": depth += 1
-                elif char == "]": depth = max(0, depth - 1)
+                if char == "[":
+                    depth += 1
+                elif char == "]":
+                    depth = max(0, depth - 1)
                 if char == "," and depth == 0:
-                    parts.append("".join(current).strip()); current = []
+                    parts.append("".join(current).strip())
+                    current = []
                 else:
                     current.append(char)
-            if current: parts.append("".join(current).strip())
+            if current:
+                parts.append("".join(current).strip())
             names = []
             for part in parts:
-                if part: names.extend(_expand_hostlist_piece(part))
-            # Retain the Slurm command only as a fallback for unusual hostlist syntax.
-            if not names and "[" in expression:
-                try:
-                    result = subprocess.run(["scontrol", "show", "hostnames", expression], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, timeout=5)
-                    if result.returncode == 0:
-                        names = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-                except (OSError, subprocess.SubprocessError):
-                    pass
+                if part:
+                    names.extend(_expand_hostlist_piece(part))
             hostname_cache[expression] = names
             return names
-
-        # Refresh if the cached inventory does not contain one or more nodes
-        # referenced by completed GPU jobs. A non-empty but stale snapshot must
-        # not silently force those jobs into "Unspecified GPU".
-        requested_nodes = set()
-        for job_row in rows.to_dicts():
-            requested_nodes.update(name.lower() for name in expand_nodelist(job_row.get("nodelist")))
-        missing_nodes = requested_nodes.difference(node_models.keys())
-        if missing_nodes:
-            try:
-                from slurm_analytics.node_inventory import refresh_node_inventory
-                fresh_nodes = refresh_node_inventory()
-                # Replace rather than merge: merging would double-count models.
-                node_models.clear()
-                partition_models.clear()
-                cluster_types.clear()
-                nodes_df = fresh_nodes
-                snapshot.nodes = fresh_nodes
-                read_node_models(fresh_nodes)
-            except Exception:
-                pass
-
-        # Last-resort lookup: query Slurm directly for each referenced node.
-        # This avoids depending on a stale/partial dashboard snapshot when the
-        # inventory refresh cannot populate GRES fields for a particular node.
-        unresolved_nodes = requested_nodes.difference(node_models.keys())
-        if unresolved_nodes:
-            try:
-                from slurm_analytics.node_inventory import parse_scontrol_nodes
-                for node_name in sorted(unresolved_nodes):
-                    try:
-                        result = subprocess.run(
-                            ["scontrol", "show", "node", node_name],
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                            universal_newlines=True,
-                            timeout=8,
-                        )
-                    except (OSError, subprocess.SubprocessError):
-                        continue
-                    if result.returncode == 0 and result.stdout.strip():
-                        read_node_models(parse_scontrol_nodes(result.stdout))
-            except Exception:
-                # GPU usage reporting should remain available even if Slurm's
-                # controller cannot be reached from the web process.
-                pass
 
         def infer_models(nodelist, gpu_count, partition_name=""):
             capacities = defaultdict(float)
@@ -783,8 +714,6 @@ def api_gpu_type_usage(request):
                 for model, capacity in node_models.get(node_name.lower(), {}).items():
                     capacities[model] += capacity
             if not capacities and partition_name:
-                # Some accounting imports omit Nodelist; partition inventory
-                # is the next-best source for a model-specific attribution.
                 for part in str(partition_name).split(","):
                     for model, capacity in partition_models.get(part.strip(), {}).items():
                         capacities[model] += capacity
@@ -799,6 +728,8 @@ def api_gpu_type_usage(request):
 
         user_hours = defaultdict(float)
         account_direct_hours = defaultdict(float)
+        # Convert the Polars result once. Parse typed allocations first and only
+        # expand a hostlist for a row that needs generic-GPU model inference.
         for row in rows.to_dicts():
             tres = str(row.get("alloctres") or "")
             allocations = defaultdict(float)
@@ -823,8 +754,6 @@ def api_gpu_type_usage(request):
                 user_hours[(user_name, model)] += value
                 account_direct_hours[(account_name, model)] += value
 
-        # Roll each direct account's per-model GPU-hours into its ancestors so
-        # charts at a given hierarchy depth compare like with like.
         parents = {str(name): (str(parent) if parent else None) for name, parent, level, path in account_rows if name}
         levels = {str(name): int(level or 0) for name, parent, level, path in account_rows if name}
         rolled = defaultdict(float)
