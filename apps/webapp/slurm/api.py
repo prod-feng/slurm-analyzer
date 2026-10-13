@@ -347,7 +347,13 @@ def api_partitions(request):
 
 @require_GET
 def api_partition_usage(request):
-    """Aggregate terminal-job CPU/GPU usage by partition over a date range."""
+    """Aggregate terminal-job resource usage by partition over a date range.
+
+    Use allocation-row MaxDiskRead/MaxDiskWrite when positive. Some clusters
+    populate these fields only on job steps, so fall back to the maximum step
+    value for that job. Task count also falls back to the maximum step NTasks
+    when the allocation row has no usable value.
+    """
     snapshot, response = _snapshot_or_response()
     if response:
         return response
@@ -356,29 +362,62 @@ def api_partition_usage(request):
     start = request.GET.get("start") or (now - timedelta(days=7)).isoformat()
     end = request.GET.get("end") or now.isoformat()
     try:
-        con = None
         from slurm_analytics.storage import connect
         con = connect()
-        cols = {r[0].lower() for r in con.execute("DESCRIBE jobs").fetchall()}
-        con.close()
-        ntasks_expr = "TRY_CAST(ntasks AS DOUBLE)" if "ntasks" in cols else "NULL::DOUBLE"
-        allocated_memory_expr = "TRY_CAST(allocated_memory_bytes AS DOUBLE)" if "allocated_memory_bytes" in cols else "NULL::DOUBLE"
-        def disk_gib_expr(column):
-            if column not in cols:
+        try:
+            cols = {r[0].lower() for r in con.execute("DESCRIBE jobs").fetchall()}
+            try:
+                step_cols = {r[0].lower() for r in con.execute("DESCRIBE job_steps").fetchall()}
+            except Exception:
+                step_cols = set()
+        finally:
+            con.close()
+
+        def disk_gib_expr(column, alias, available_columns):
+            if column not in available_columns:
                 return "NULL::DOUBLE"
-            value = "TRY_CAST(regexp_extract(upper(CAST({0} AS VARCHAR)), '^([0-9]+(?:\\.[0-9]+)?)[ ]*([KMGTPE]?)', 1) AS DOUBLE)".format(column)
-            unit = "regexp_extract(upper(CAST({0} AS VARCHAR)), '^([0-9]+(?:\\.[0-9]+)?)[ ]*([KMGTPE]?)', 2)".format(column)
+            value = "TRY_CAST(regexp_extract(upper(CAST({0}.{1} AS VARCHAR)), '^([0-9]+(?:\\.[0-9]+)?)[ ]*([KMGTPE]?)', 1) AS DOUBLE)".format(alias, column)
+            unit = "regexp_extract(upper(CAST({0}.{1} AS VARCHAR)), '^([0-9]+(?:\\.[0-9]+)?)[ ]*([KMGTPE]?)', 2)".format(alias, column)
             return "(({value}) * CASE {unit} WHEN 'K' THEN 1.0/1048576.0 WHEN 'M' THEN 1.0/1024.0 WHEN 'G' THEN 1.0 WHEN 'T' THEN 1024.0 WHEN 'P' THEN 1048576.0 WHEN 'E' THEN 1073741824.0 ELSE 1.0/1073741824.0 END)".format(value=value, unit=unit)
-        disk_read_expr, disk_write_expr = disk_gib_expr("maxdiskread"), disk_gib_expr("maxdiskwrite")
+
+        job_read = disk_gib_expr("maxdiskread", "j", cols)
+        job_write = disk_gib_expr("maxdiskwrite", "j", cols)
+        step_read = disk_gib_expr("maxdiskread", "js", step_cols)
+        step_write = disk_gib_expr("maxdiskwrite", "js", step_cols)
+        step_tasks = "TRY_CAST(js.ntasks AS DOUBLE)" if "ntasks" in step_cols else "NULL::DOUBLE"
+        if "canonical_job_id" in step_cols and "canonical_job_id" in cols:
+            step_io_sql = """SELECT js.canonical_job_id,
+                       MAX({step_read}) AS disk_read_gib,
+                       MAX({step_write}) AS disk_write_gib,
+                       MAX({step_tasks}) AS max_ntasks
+                FROM job_steps js
+                JOIN filtered_jobs fj ON fj.canonical_job_id = js.canonical_job_id
+                GROUP BY js.canonical_job_id""".format(step_read=step_read, step_write=step_write, step_tasks=step_tasks)
+            step_join_condition = "si.canonical_job_id = j.canonical_job_id"
+        else:
+            step_io_sql = "SELECT NULL::VARCHAR AS canonical_job_id, NULL::DOUBLE AS disk_read_gib, NULL::DOUBLE AS disk_write_gib, NULL::DOUBLE AS max_ntasks WHERE FALSE"
+            step_join_condition = "FALSE"
+
+        job_tasks = "TRY_CAST(j.ntasks AS DOUBLE)" if "ntasks" in cols else "NULL::DOUBLE"
+        ntasks_expr = "COALESCE(NULLIF({job_tasks}, 0), si.max_ntasks, 0.0)".format(job_tasks=job_tasks)
+        disk_read_expr = "CASE WHEN COALESCE({job_read}, 0) > 0 THEN {job_read} ELSE COALESCE(si.disk_read_gib, {job_read}, 0.0) END".format(job_read=job_read)
+        disk_write_expr = "CASE WHEN COALESCE({job_write}, 0) > 0 THEN {job_write} ELSE COALESCE(si.disk_write_gib, {job_write}, 0.0) END".format(job_write=job_write)
+        allocated_memory_expr = "TRY_CAST(allocated_memory_bytes AS DOUBLE)" if "allocated_memory_bytes" in cols else "NULL::DOUBLE"
         query = query_df(
             """
-            WITH base_jobs AS (
-                SELECT *,
-                       COALESCE(NULLIF(TRIM(partition), ''), '(Unknown partition)') AS partition_list
-                FROM jobs
-                WHERE TRY_CAST(start_time AS TIMESTAMPTZ) >= TRY_CAST(? AS TIMESTAMPTZ)
-                  AND TRY_CAST(start_time AS TIMESTAMPTZ) < TRY_CAST(? AS TIMESTAMPTZ)
-                  AND lower(COALESCE(state_category, '')) NOT IN ('running', 'pending')
+            WITH filtered_jobs AS (
+                SELECT j.* FROM jobs j
+                WHERE TRY_CAST(j.start_time AS TIMESTAMPTZ) >= TRY_CAST(? AS TIMESTAMPTZ)
+                  AND TRY_CAST(j.start_time AS TIMESTAMPTZ) < TRY_CAST(? AS TIMESTAMPTZ)
+                  AND lower(COALESCE(j.state_category, '')) NOT IN ('running', 'pending')
+            ), step_io AS ({step_io_sql}), base_jobs AS (
+                SELECT j.*,
+                       COALESCE(NULLIF(TRIM(j.partition), ''), '(Unknown partition)') AS partition_list,
+                       {ntasks_expr} AS resolved_ntasks,
+                       {disk_read_expr} AS resolved_disk_read_gib,
+                       {disk_write_expr} AS resolved_disk_write_gib
+                FROM filtered_jobs j
+                LEFT JOIN step_io si ON {step_join_condition}
             ), split_jobs AS (
                 SELECT b.*,
                        TRIM(p.partition_name) AS partition_name,
@@ -391,18 +430,26 @@ def api_partition_usage(request):
                    SUM((COALESCE(TRY_CAST(ncpus AS DOUBLE), 0) * COALESCE(TRY_CAST(elapsed_seconds AS DOUBLE), 0) / 3600.0) / partition_choices) AS cpu_hours,
                    SUM((COALESCE(TRY_CAST(gpu_count AS DOUBLE), 0) * COALESCE(TRY_CAST(elapsed_seconds AS DOUBLE), 0) / 3600.0) / partition_choices) AS gpu_hours,
                    SUM((COALESCE({allocated_memory_expr}, 0) / 1073741824.0 * COALESCE(TRY_CAST(elapsed_seconds AS DOUBLE), 0) / 3600.0) / partition_choices) AS memory_gb_hours,
-                   SUM(COALESCE({ntasks}, 0) / partition_choices) AS total_tasks,
-                   SUM(COALESCE({disk_read_expr}, 0) / partition_choices) AS disk_read_gib,
-                   SUM(COALESCE({disk_write_expr}, 0) / partition_choices) AS disk_write_gib,
+                   SUM(COALESCE(resolved_ntasks, 0) / partition_choices) AS total_tasks,
+                   SUM(COALESCE(resolved_disk_read_gib, 0) / partition_choices) AS disk_read_gib,
+                   SUM(COALESCE(resolved_disk_write_gib, 0) / partition_choices) AS disk_write_gib,
+                   AVG(resolved_ntasks) AS avg_tasks_per_job,
+                   MAX(resolved_ntasks) AS max_tasks_per_job,
                    AVG(TRY_CAST(nnodes AS DOUBLE)) AS avg_nodes_per_job,
-                   MAX(TRY_CAST(nnodes AS DOUBLE)) AS max_nodes_per_job,
-                   AVG({ntasks}) AS avg_tasks_per_job,
-                   MAX({ntasks}) AS max_tasks_per_job
+                   MAX(TRY_CAST(nnodes AS DOUBLE)) AS max_nodes_per_job
             FROM split_jobs
             WHERE partition_name <> ''
             GROUP BY partition_name
             ORDER BY cpu_hours DESC
-            """.format(ntasks=ntasks_expr, allocated_memory_expr=allocated_memory_expr, disk_read_expr=disk_read_expr, disk_write_expr=disk_write_expr), [start, end],
+            """.format(
+                step_io_sql=step_io_sql,
+                step_join_condition=step_join_condition,
+                ntasks_expr=ntasks_expr,
+                disk_read_expr=disk_read_expr,
+                disk_write_expr=disk_write_expr,
+                allocated_memory_expr=allocated_memory_expr,
+            ),
+            [start, end],
         )
         return JsonResponse(dataframe_to_records(query), safe=False)
     except Exception as exc:

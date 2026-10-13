@@ -18,7 +18,7 @@ body{margin:0;padding:24px;font-family:Arial,sans-serif;background:#f5f7fa;color
 <div class="toolbar">
   <label>History <select id="range"><option value="24h">24 hours</option><option value="7d" selected>7 days</option><option value="30d">30 days</option><option value="90d">90 days</option><option value="180d">180 days</option><option value="1y">1 year</option><option value="custom">Custom range</option></select></label>
   <span id="custom-range" class="custom-range"><label>Start <input id="custom-start" type="datetime-local"></label><label>End <input id="custom-end" type="datetime-local"></label><button id="apply-range">Apply</button></span>
-  <label>Bucket <select id="interval"><option value="15m">15 min</option><option value="1h" selected>1 hour</option><option value="6h">6 hours</option><option value="1d">1 day</option></select></label>
+  <label>Bucket <select id="interval"><option value="15m">15 min</option><option value="1h">1 hour</option><option value="6h">6 hours</option><option value="1d" selected>1 day</option></select></label>
   <span id="loading-indicator" class="loading-indicator" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span><span>Reloading data…</span></span><span id="refreshed" class="muted"></span>
 </div>
 <div class="tabs">
@@ -180,30 +180,50 @@ function getRange(){const range=document.getElementById("range").value;if(range!
 function baseLayout(title){return{title,margin:{l:65,r:25,t:55,b:55},hovermode:"x unified",xaxis:{automargin:true},yaxis:{automargin:true},legend:{orientation:"h"}}}
 function fmt(v){return Number(v||0).toLocaleString(undefined,{maximumFractionDigits:1})}
 function safe(v){return v==null?"":String(v).replace(/[&<>\"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
-function pieData(rows,metric,label){const sorted=[...rows].sort((a,b)=>Number(b[metric]||0)-Number(a[metric]||0));const top=sorted.slice(0,10);const other=sorted.slice(10).reduce((s,r)=>s+Number(r[metric]||0),0);const labels=top.map(r=>r[label]);const values=top.map(r=>Number(r[metric]||0));if(other>0){labels.push("Other");values.push(other)}return {labels,values}}
+function pieData(rows,metric,label){const sorted=rows.filter(r=>Number.isFinite(Number(r[metric]))&&Number(r[metric])>0).sort((a,b)=>Number(b[metric])-Number(a[metric]));const top=sorted.slice(0,10);const other=sorted.slice(10).reduce((s,r)=>s+Number(r[metric]),0);const labels=top.map(r=>r[label]);const values=top.map(r=>Number(r[metric]));if(other>0){labels.push("Other");values.push(other)}return {labels,values}}
 function renderPie(id,rows,metric,label,title){
-  const sorted=[...rows].sort((a,b)=>Number(b[metric]||0)-Number(a[metric]||0));
-  const total=rows.reduce((sum,r)=>sum+Number(r[metric]||0),0);
+  const element=document.getElementById(id);
+  if(!element)return;
+  const container=element.closest(".chart")||element.parentElement;
+  // Do not feed zero-valued categories to Plotly: sparse metrics such as NTasks
+  // and MaxDiskRead/Write otherwise produce apparently empty pies.
+  const positiveRows=(rows||[]).filter(r=>Number.isFinite(Number(r[metric]))&&Number(r[metric])>0);
+  const total=positiveRows.reduce((sum,r)=>sum+Number(r[metric]),0);
+  if(container)container.style.display="";
+  if(!(total>0)){
+    // Keep the chart card visible and explain the absence of positive values.
+    // Account hierarchy levels are filtered before this function is called,
+    // so genuinely empty account levels remain hidden without suppressing
+    // the task-count and disk-I/O chart slots on Users/Partitions.
+    if(window.Plotly)Plotly.react(id,[],{
+      title:{text:title},
+      annotations:[{text:"No positive data available for this metric in the selected range",xref:"paper",yref:"paper",x:.5,y:.5,showarrow:false}],
+      xaxis:{visible:false},yaxis:{visible:false},margin:{l:10,r:10,t:65,b:10}
+    },{responsive:true});
+    return;
+  }
+  const sorted=[...positiveRows].sort((a,b)=>Number(b[metric])-Number(a[metric]));
   const totalText=metric==="jobs"?Math.round(total).toLocaleString():total.toLocaleString(undefined,{maximumFractionDigits:1});
   const units={jobs:"jobs",allocated_nodes:"node allocations",cpu_hours:"CPU-hours",gpu_hours:"GPU-hours",memory_gb_hours:"GiB-hours",total_tasks:"tasks",disk_read_gib:"GiB data read",disk_write_gib:"GiB data written",elapsed_hours:"hours"};
   const unit=units[metric]||metric.replaceAll("_"," ");
   const titleText=`${title}<br><sup>Total: ${totalText} ${unit}</sup>`;
-  // For any metric, a single account/user with >=80% of the total makes a
-  // conventional pie hard to read. Show the dominant contributor vs everyone
-  // else, plus a second pie expanding the remaining contributors.
-  if(total>0 && sorted.length>1 && Number(sorted[0][metric]||0)/total>=0.8){
-    const dominant=sorted[0],rest=sorted.slice(1),dominantValue=Number(dominant[metric]||0);
-    const restTotal=rest.reduce((sum,r)=>sum+Number(r[metric]||0),0);
+  // Split out a dominant contributor only when there is meaningful data in
+  // the remainder; avoid rendering a second, all-zero pie.
+  if(sorted.length>1 && Number(sorted[0][metric])/total>=0.8){
+    const dominant=sorted[0],rest=sorted.slice(1),dominantValue=Number(dominant[metric]);
+    const restTotal=rest.reduce((sum,r)=>sum+Number(r[metric]),0);
     const restPie=pieData(rest,metric,label);
-    const traces=[
-      {type:"pie",labels:[dominant[label],"All others"],values:[dominantValue,restTotal],domain:{x:[0,0.47],y:[0,1]},textinfo:"label+percent",hovertemplate:`%{label}: %{value:,.1f} ${unit} (%{percent})<extra></extra>`,sort:false},
-      {type:"pie",labels:restPie.labels,values:restPie.values,domain:{x:[0.53,1],y:[0,1]},textinfo:"label+percent",hovertemplate:`%{label}: %{value:,.1f} ${unit} (%{percent} of remaining share)<extra></extra>`}
-    ];
-    Plotly.react(id,traces,{title:{text:titleText},annotations:[{text:"Overall share",x:0.235,y:0.98,xref:"paper",yref:"paper",showarrow:false},{text:`All others (${restTotal.toLocaleString(undefined,{maximumFractionDigits:1})} ${unit})`,x:0.765,y:0.98,xref:"paper",yref:"paper",showarrow:false}],margin:{l:10,r:10,t:95,b:20},showlegend:false},{responsive:true});
-    return;
+    if(restTotal>0){
+      const traces=[
+        {type:"pie",labels:[dominant[label],"All others"],values:[dominantValue,restTotal],domain:{x:[0,0.47],y:[0,1]},textinfo:"label+percent",hovertemplate:`%{label}: %{value:,.1f} ${unit} (%{percent})<extra></extra>`,sort:false},
+        {type:"pie",labels:restPie.labels,values:restPie.values,domain:{x:[0.53,1],y:[0,1]},textinfo:"label+percent",hovertemplate:`%{label}: %{value:,.1f} ${unit} (%{percent} of remaining share)<extra></extra>`}
+      ];
+      Plotly.react(id,traces,{title:{text:titleText},annotations:[{text:"Overall share",x:0.235,y:0.98,xref:"paper",yref:"paper",showarrow:false},{text:`All others (${restTotal.toLocaleString(undefined,{maximumFractionDigits:1})} ${unit})`,x:0.765,y:0.98,xref:"paper",yref:"paper",showarrow:false}],margin:{l:10,r:10,t:95,b:20},showlegend:false},{responsive:true});
+      return;
+    }
   }
-  const p=pieData(rows,metric,label);
-  Plotly.react(id,[{labels:p.labels,values:p.values,type:"pie",textinfo:"label+percent",hovertemplate:"%{label}: %{value:.1f} (%{percent})<extra></extra>"}],{title:{text:titleText},margin:{l:20,r:20,t:80,b:25},legend:{orientation:"h"}},{responsive:true});
+  const p=pieData(positiveRows,metric,label);
+  Plotly.react(id,[{labels:p.labels,values:p.values,type:"pie",textinfo:"label+percent",hovertemplate:`%{label}: %{value:.1f} ${unit} (%{percent})<extra></extra>`}],{title:{text:titleText},margin:{l:20,r:20,t:80,b:25},legend:{orientation:"h"}},{responsive:true});
 }
 function fmtMaybe(v,suffix=""){return v==null||!Number.isFinite(Number(v))?"N/A":fmt(Number(v))+suffix}
 function secondsHours(v){return v==null?null:Number(v)/3600}
@@ -385,11 +405,12 @@ function renderAccountLevelPies(rows){
   ];
   for(let depth=0;depth<=maxDepth;depth++){
     const atLevel=rows.filter(r=>r._depth===depth);
-    if(!atLevel.length)continue;
+    const availableMetrics=metrics.filter(([metricKey])=>atLevel.some(r=>Number.isFinite(Number(r[metricKey]))&&Number(r[metricKey])>0));
+    if(!atLevel.length||!availableMetrics.length)continue;
     const group=document.createElement("div");group.className="account-level-group";
     const heading=document.createElement("h3");heading.className="account-level-title";heading.textContent=`Level ${depth+1}`;group.appendChild(heading);
     const chartRow=document.createElement("div");chartRow.className="account-level-charts";group.appendChild(chartRow);holder.appendChild(group);
-    for(const [metricKey,metricTitle] of metrics){
+    for(const [metricKey,metricTitle] of availableMetrics){
       const id=`accounts-level-${depth}-${metricKey}`;const box=document.createElement("div");box.className="chart pie-chart";box.innerHTML=`<div id="${id}"></div>`;chartRow.appendChild(box);
       renderPie(id,atLevel,metricKey,"account",`Level ${depth+1}: ${metricTitle}`);
     }

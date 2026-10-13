@@ -38,18 +38,20 @@ def _order_by(sort, direction, name_alias="name"):
 
 
 def _usage_sql(table, name_column, clauses):
-    """Build common resource accounting expressions for allocation rows.
+    """Build per-allocation resource metrics, falling back to step telemetry.
 
-    Memory is reported as GB-hours using the job's allocated memory. GPU memory
-    is a peak telemetry value (GB), because Slurm's accounting telemetry does
-    not provide a directly comparable time-integrated GPU-memory metric.
+    Some Slurm versions/clusters leave MaxDiskRead/MaxDiskWrite empty or zero
+    on the allocation row while recording them on job steps. For each job we
+    prefer a positive allocation-row value; otherwise use the maximum reported
+    value across its steps. This preserves the meaning of Slurm's ``Max*``
+    fields and avoids adding the same job's allocation and step telemetry twice.
+    Task count similarly falls back to the maximum step NTasks only when the
+    allocation-row NTasks value is missing or zero.
     """
     where = " AND ".join(clauses)
-    # Compute allocated memory from the original Slurm ReqMem field so this
-    # works for databases created before allocated_memory_bytes was added.
     memory_bytes = r"""(
-        COALESCE(TRY_CAST(regexp_extract(reqmem, '^([0-9]+(?:\.[0-9]+)?)[KMGTPE]?[cn]?$', 1) AS DOUBLE), 0)
-        * CASE upper(regexp_extract(reqmem, '^[0-9]+(?:\.[0-9]+)?([KMGTPE]?)', 1))
+        COALESCE(TRY_CAST(regexp_extract(j.reqmem, '^([0-9]+(?:\.[0-9]+)?)[KMGTPE]?[cn]?$', 1) AS DOUBLE), 0)
+        * CASE upper(regexp_extract(j.reqmem, '^[0-9]+(?:\.[0-9]+)?([KMGTPE]?)', 1))
             WHEN 'K' THEN 1024.0
             WHEN 'M' THEN 1048576.0
             WHEN 'G' THEN 1073741824.0
@@ -58,43 +60,75 @@ def _usage_sql(table, name_column, clauses):
             WHEN 'E' THEN 1152921504606846976.0
             ELSE 1.0
           END
-        * CASE lower(regexp_extract(reqmem, '([cn])$', 1))
-            WHEN 'c' THEN COALESCE(TRY_CAST(ncpus AS DOUBLE), 0)
-            ELSE COALESCE(TRY_CAST(nnodes AS DOUBLE), 0)
+        * CASE lower(regexp_extract(j.reqmem, '([cn])$', 1))
+            WHEN 'c' THEN COALESCE(TRY_CAST(j.ncpus AS DOUBLE), 0)
+            ELSE COALESCE(TRY_CAST(j.nnodes AS DOUBLE), 0)
           END
     )"""
     schema_con = connect()
     try:
         available_columns = {row[0].lower() for row in schema_con.execute("DESCRIBE jobs").fetchall()}
+        try:
+            step_columns = {row[0].lower() for row in schema_con.execute("DESCRIBE job_steps").fetchall()}
+        except Exception:
+            step_columns = set()
     finally:
         schema_con.close()
 
-    def disk_gib(column):
-        if column.lower() not in available_columns:
+    def disk_gib(column, alias, columns):
+        if column.lower() not in columns:
             return "NULL::DOUBLE"
-        value = "TRY_CAST(regexp_extract(upper(CAST({0} AS VARCHAR)), '^([0-9]+(?:\\.[0-9]+)?)[ ]*([KMGTPE]?)', 1) AS DOUBLE)".format(column)
-        unit = "regexp_extract(upper(CAST({0} AS VARCHAR)), '^([0-9]+(?:\\.[0-9]+)?)[ ]*([KMGTPE]?)', 2)".format(column)
+        value = "TRY_CAST(regexp_extract(upper(CAST({0}.{1} AS VARCHAR)), '^([0-9]+(?:\\.[0-9]+)?)[ ]*([KMGTPE]?)', 1) AS DOUBLE)".format(alias, column)
+        unit = "regexp_extract(upper(CAST({0}.{1} AS VARCHAR)), '^([0-9]+(?:\\.[0-9]+)?)[ ]*([KMGTPE]?)', 2)".format(alias, column)
         return "(({value}) * CASE {unit} WHEN 'K' THEN 1.0/1048576.0 WHEN 'M' THEN 1.0/1024.0 WHEN 'G' THEN 1.0 WHEN 'T' THEN 1024.0 WHEN 'P' THEN 1048576.0 WHEN 'E' THEN 1073741824.0 ELSE 1.0/1073741824.0 END)".format(value=value, unit=unit)
 
-    read_gib = disk_gib("maxdiskread")
-    write_gib = disk_gib("maxdiskwrite")
-    tasks_expr = "TRY_CAST(ntasks AS DOUBLE)" if "ntasks" in available_columns else "NULL::DOUBLE"
+    job_read = disk_gib("maxdiskread", "j", available_columns)
+    job_write = disk_gib("maxdiskwrite", "j", available_columns)
+    step_read = disk_gib("maxdiskread", "js", step_columns)
+    step_write = disk_gib("maxdiskwrite", "js", step_columns)
+    step_tasks = "TRY_CAST(js.ntasks AS DOUBLE)" if "ntasks" in step_columns else "NULL::DOUBLE"
+    if "canonical_job_id" in step_columns and "canonical_job_id" in available_columns:
+        step_io_sql = """SELECT js.canonical_job_id,
+                   MAX({step_read}) AS disk_read_gib,
+                   MAX({step_write}) AS disk_write_gib,
+                   MAX({step_tasks}) AS max_ntasks
+            FROM job_steps js
+            JOIN filtered_jobs fj ON fj.canonical_job_id = js.canonical_job_id
+            GROUP BY js.canonical_job_id""".format(
+                step_read=step_read,
+                step_write=step_write,
+                step_tasks=step_tasks,
+            )
+    else:
+        step_io_sql = "SELECT NULL::VARCHAR AS canonical_job_id, NULL::DOUBLE AS disk_read_gib, NULL::DOUBLE AS disk_write_gib, NULL::DOUBLE AS max_ntasks WHERE FALSE"
+
+    job_tasks = "TRY_CAST(j.ntasks AS DOUBLE)" if "ntasks" in available_columns else "NULL::DOUBLE"
+    tasks_expr = "COALESCE(NULLIF({job_tasks}, 0), step_io.max_ntasks, 0.0)".format(job_tasks=job_tasks)
+    read_gib = "CASE WHEN COALESCE({job_read}, 0) > 0 THEN {job_read} ELSE COALESCE(step_io.disk_read_gib, {job_read}, 0.0) END".format(job_read=job_read)
+    write_gib = "CASE WHEN COALESCE({job_write}, 0) > 0 THEN {job_write} ELSE COALESCE(step_io.disk_write_gib, {job_write}, 0.0) END".format(job_write=job_write)
     return """
+        WITH filtered_jobs AS (
+            SELECT * FROM {table} WHERE {where}
+        ), step_io AS ({step_io_sql})
         SELECT {name_column} AS name,
                COUNT(*) AS jobs,
-               SUM(COALESCE(TRY_CAST(nnodes AS DOUBLE), 0)) AS allocated_nodes,
-               SUM(COALESCE(TRY_CAST(ncpus AS DOUBLE), 0) * COALESCE(TRY_CAST(elapsed_seconds AS DOUBLE), 0)) / 3600.0 AS cpu_hours,
-               SUM(COALESCE(TRY_CAST(gpu_count AS DOUBLE), 0) * COALESCE(TRY_CAST(elapsed_seconds AS DOUBLE), 0)) / 3600.0 AS gpu_hours,
-               SUM(({memory_bytes} / 1073741824.0) * COALESCE(TRY_CAST(elapsed_seconds AS DOUBLE), 0)) / 3600.0 AS memory_gb_hours,
-               MAX(COALESCE(TRY_CAST(gpu_mem_max_bytes AS DOUBLE), 0)) / 1073741824.0 AS gpu_memory_gb,
-               SUM(COALESCE(TRY_CAST(elapsed_seconds AS DOUBLE), 0)) / 3600.0 AS elapsed_hours,
+               SUM(COALESCE(TRY_CAST(j.nnodes AS DOUBLE), 0)) AS allocated_nodes,
+               SUM(COALESCE(TRY_CAST(j.ncpus AS DOUBLE), 0) * COALESCE(TRY_CAST(j.elapsed_seconds AS DOUBLE), 0)) / 3600.0 AS cpu_hours,
+               SUM(COALESCE(TRY_CAST(j.gpu_count AS DOUBLE), 0) * COALESCE(TRY_CAST(j.elapsed_seconds AS DOUBLE), 0)) / 3600.0 AS gpu_hours,
+               SUM(({memory_bytes} / 1073741824.0) * COALESCE(TRY_CAST(j.elapsed_seconds AS DOUBLE), 0)) / 3600.0 AS memory_gb_hours,
+               MAX(COALESCE(TRY_CAST(j.gpu_mem_max_bytes AS DOUBLE), 0)) / 1073741824.0 AS gpu_memory_gb,
+               SUM(COALESCE(TRY_CAST(j.elapsed_seconds AS DOUBLE), 0)) / 3600.0 AS elapsed_hours,
                SUM(COALESCE({tasks_expr}, 0)) AS total_tasks,
                SUM(COALESCE({read_gib}, 0.0)) AS disk_read_gib,
                SUM(COALESCE({write_gib}, 0.0)) AS disk_write_gib
-        FROM {table}
-        WHERE {where}
+        FROM filtered_jobs j
+        LEFT JOIN step_io ON step_io.canonical_job_id = j.canonical_job_id
         GROUP BY {name_column}
-    """.format(name_column=name_column, table=table, where=where, memory_bytes=memory_bytes, read_gib=read_gib, write_gib=write_gib, tasks_expr=tasks_expr)
+    """.format(
+        name_column=name_column, table=table, where=where, step_io_sql=step_io_sql,
+        memory_bytes=memory_bytes, read_gib=read_gib, write_gib=write_gib,
+        tasks_expr=tasks_expr,
+    )
 
 
 def _round_metrics(records):
@@ -102,13 +136,21 @@ def _round_metrics(records):
     metrics = (
         "allocated_nodes", "cpu_hours", "gpu_hours",
         "memory_gb_hours", "gpu_memory_gb", "elapsed_hours",
-        "total_tasks", "disk_read_gib", "disk_write_gib",
+        "total_tasks",
     )
+    precise_metrics = ("disk_read_gib", "disk_write_gib")
     for record in records:
         for key in metrics:
             value = record.get(key)
             if value is not None:
                 record[key] = round(float(value), 2)
+        # Keep sub-centi-GiB usage for pie-share calculations. UI tables format
+        # values separately, while rounding each user/account to 0.01 GiB can
+        # erase small but valid I/O totals entirely.
+        for key in precise_metrics:
+            value = record.get(key)
+            if value is not None:
+                record[key] = round(float(value), 6)
     return records
 
 
@@ -182,7 +224,8 @@ def account_usage(start=None, end=None, account=None, limit=100, sort="cpu_hours
         final_params.append(limit)
         result = fetch_polars(con, sql, final_params)
         if round_metrics:
-            result = result.with_columns([pl.col(c).round(2) for c in ("allocated_nodes", "cpu_hours", "gpu_hours", "memory_gb_hours", "gpu_memory_gb", "elapsed_hours", "total_tasks", "disk_read_gib", "disk_write_gib") if c in result.columns])
+            result = result.with_columns([pl.col(c).round(2) for c in ("allocated_nodes", "cpu_hours", "gpu_hours", "memory_gb_hours", "gpu_memory_gb", "elapsed_hours", "total_tasks") if c in result.columns])
+            result = result.with_columns([pl.col(c).round(6) for c in ("disk_read_gib", "disk_write_gib") if c in result.columns])
         return result
     finally:
         con.close()
@@ -244,7 +287,8 @@ def user_usage(start=None, end=None, user=None, account=None, limit=100, sort="c
         final_params.append(limit)
         result = fetch_polars(con, sql, final_params)
         if round_metrics:
-            result = result.with_columns([pl.col(c).round(2) for c in ("allocated_nodes", "cpu_hours", "gpu_hours", "memory_gb_hours", "gpu_memory_gb", "elapsed_hours", "total_tasks", "disk_read_gib", "disk_write_gib") if c in result.columns])
+            result = result.with_columns([pl.col(c).round(2) for c in ("allocated_nodes", "cpu_hours", "gpu_hours", "memory_gb_hours", "gpu_memory_gb", "elapsed_hours", "total_tasks") if c in result.columns])
+            result = result.with_columns([pl.col(c).round(6) for c in ("disk_read_gib", "disk_write_gib") if c in result.columns])
         return result
     finally:
         con.close()
