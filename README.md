@@ -27,6 +27,16 @@ Example configuration:
 
 The `db_path` must be writable by the Django process. Back up each DuckDB database separately. Do not use the same database file for more than one cluster. Keep the cluster configuration file outside the public web root and restrict its permissions.
 
+#### Data flow at a glance
+
+For a remote cluster, the workflow has three stages:
+
+1. **Export on the source cluster:** run `tools/export_slurm_cluster.py` on a host that can access that cluster's Slurm commands. It collects historical `sacct` records in chunks and exports the current account/association, node, and partition metadata.
+2. **Transfer the export:** copy the generated files to the dashboard host, keeping each cluster's files in its own directory. Keep every `sacct_*.out` file with its matching `.out.json` sidecar.
+3. **Import into that cluster's database:** run `initialize_slurm` for the first import, then `refresh_slurm_db` with newly collected files for routine updates. Set `SLURM_DUCKDB_PATH` to the database configured for that cluster.
+
+In short: **source Slurm cluster → export files → dashboard host → cluster-specific DuckDB database**. The detailed export, initial-import, and update commands are documented in [Importing and updating a cluster database](#importing-and-updating-a-cluster-database) below.
+
 ### Import historical data for each cluster
 
 For an imported cluster, run the management command with `SLURM_DUCKDB_PATH` set to that cluster's configured database. Run it inside the same container/environment that contains the project code and dependencies.
@@ -291,3 +301,4 @@ SLURM_DUCKDB_PATH=/workspace/data/cluster2.duckdb \
 ```
 
 Back up the database before a large initial import or historical repair. Do not run concurrent import/refresh writers against the same DuckDB file. If an import fails, inspect the error before retrying and verify that the correct database path and matching sidecar files were used.
+
