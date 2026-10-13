@@ -49,16 +49,21 @@ Use `--no-accounts` only if account/association information is unavailable or yo
 
 ### Update a file-import cluster later
 
-When newer accounting files are available, import them into the same cluster database:
+For routine updates, use `refresh_slurm_db` against the **same DuckDB file** that was initialized for the cluster. Collect a recent overlapping date range, transfer the new accounting files and current metadata exports, then import them together:
 
 ```bash
 SLURM_DUCKDB_PATH=/var/lib/slurm-analytics/cluster2.duckdb \
-  python manage.py initialize_slurm \
-  --history-file "/data/cluster2-history/*.out" \
-  --no-accounts
+  python manage.py refresh_slurm_db \
+  --history-file "/data/cluster2-export/sacct_*.out" \
+  --accounts-file /data/cluster2-export/accounts.json \
+  --nodes-file /data/cluster2-export/nodes.json \
+  --partitions-file /data/cluster2-export/partitions.json \
+  --start 2026-10-10 --end 2026-10-13
 ```
 
-The importer upserts records using their record keys, so overlapping files can be re-imported. Do not run multiple writers against the same DuckDB database concurrently. A file-import cluster does not automatically refresh itself; transfer new files and rerun the import when you want to update it.
+`refresh_slurm_db --history-file` delegates to the existing `initialize_slurm` importer; it does not introduce a second parser or a new schema. Existing job and step record keys are upserted, so overlapping files can be imported repeatedly without duplicating those records. The account/association, node, and partition inventory imports update their current metadata snapshots; they do not remove old job history. If metadata files are not supplied, they are not refreshed by this file-based invocation. For remote clusters, include the remote cluster's `accounts.json`, `nodes.json`, and `partitions.json` rather than querying the dashboard host's local Slurm installation.
+
+The `--start` and `--end` options set import metadata/cursor values; in file-import mode they **do not filter records inside the `.out` files**. The actual accounting range is determined by the files you collected. Keep each `.out.json` sidecar next to its `.out` file. Do not run multiple writers against the same DuckDB file concurrently. File-import clusters do not update automatically: schedule or manually run collection, transfer, and import when you want refreshed data.
 
 ### Default routes
 
@@ -184,47 +189,105 @@ The initializer queries `sacctmgr` unless `--no-accounts` is supplied. Confirm a
 In `AllocTRES`, generic `gres/gpu` and typed fields such as `gres/gpu:h200` can describe the same allocation. The parser prefers the generic total if present and otherwise sums typed fields. If a database was created with an older parser, back it up and rerun initialization with the corrected code.
 
 
-## Remote cluster export without installing this application
+## Importing and updating a cluster database
 
-A remote cluster only needs its existing Slurm commands (`sacct`, `sacctmgr`,
-`scontrol`) and Python 3.6 or newer. Copy `tools/export_slurm_cluster.py` to that
-cluster (or use the same script from a shared filesystem), then run:
+This workflow uses the current collector, export formats, importer, and DuckDB tables. There is no separate remote-cluster database implementation: collect on a machine that can access the target Slurm cluster, transfer the resulting files, and run the existing Django management command against the target cluster's DuckDB file.
+
+### A. Collect data on the Slurm cluster
+
+A remote cluster does not need this Django application or its DuckDB/Polars dependencies installed. It needs Python 3.6+ and access to `sacct`, `sacctmgr`, and `scontrol`. Copy `tools/export_slurm_cluster.py` to the cluster or run it from a shared filesystem:
 
 ```bash
 python3 export_slurm_cluster.py \
-  --start 2020-01-01 --end 2026-10-11 \
-  --output-dir /tmp/cluster2-export --chunk-days 3
+  --start 2020-01-01 \
+  --end 2026-10-13 \
+  --output-dir /tmp/cluster2-export \
+  --chunk-days 3
 ```
 
-This creates raw `sacct_*.out` files and `.out.json` field sidecars, plus
-`accounts.json` (account hierarchy and associations) and `nodes.json` (the
-cluster's `scontrol show node -a` output). It does not install Django, DuckDB,
-Polars, or any dashboard dependencies on the remote cluster. Use a short
-`--chunk-days` (for example 1-3) for large histories or a busy slurmdbd.
+`--start` is inclusive and `--end` is exclusive. Choose a manageable `--chunk-days` (often 1–3 days for busy clusters or older SlurmDBD instances). The exporter writes:
 
-The exporter deliberately uses the same `FIELDS` list and ordering as the last
-working single-cluster collector. It omits `group`, `gid`, `uid`,
-`tresusageintot`, and `maxvmsize`; `jobname` is intentionally the final field.
-The `.out.json` sidecars record this exact field list so the importer can map
-columns correctly. Do not reorder or add fields without updating the metadata
-and ensuring the importer understands them.
+| File | Contents |
+|---|---|
+| `sacct_*.out` | Raw parsable Slurm accounting output, split into date chunks |
+| `sacct_*.out.json` | The matching file's exact field list and collection metadata; required to map columns correctly |
+| `accounts.json` | Account hierarchy and associations exported using `sacctmgr` |
+| `nodes.json` | Current node inventory from `scontrol show node -a` |
+| `partitions.json` | Current partition inventory from `scontrol show partition -o` |
 
-Transfer the export directory to the dashboard host, then initialize that
-cluster's configured DuckDB file. For example:
+The exporter supports `--skip-jobs`, `--skip-accounts`, `--skip-nodes`, and `--skip-partitions` if you intentionally want to omit a data category. For a full cluster import, do not use those flags. Keep every `.out.json` sidecar beside its corresponding `.out` file. Do not manually reorder fields in the sidecar or change the exporter's `FIELDS` list unless the importer is updated to match.
+
+Transfer the whole export directory to the dashboard host, for example with `scp` or your normal file-transfer mechanism. Keep the exports separated by cluster so that files from different clusters are never mixed.
+
+### B. Initial import into a cluster's DuckDB database
+
+Set `SLURM_DUCKDB_PATH` to the database configured for the target cluster. The path must be writable by the user running Django. Run the command inside the application container/environment so the project dependencies are available:
 
 ```bash
 export SLURM_DUCKDB_PATH=/workspace/data/cluster2.duckdb
+
 python /workspace/manage.py initialize_slurm \
   --history-file '/workspace/import/cluster2/sacct_*.out' \
   --accounts-file /workspace/import/cluster2/accounts.json \
   --nodes-file /workspace/import/cluster2/nodes.json \
-  --start 1970-01-01 --end 2026-10-11
+  --partitions-file /workspace/import/cluster2/partitions.json \
+  --start 1970-01-01 \
+  --end 2026-10-13
 ```
 
-The quoted history wildcard is expanded by the management command. Keep each
-`.out.json` sidecar beside its `.out` file. Account hierarchy and node inventory
-are stored in the selected cluster's DuckDB. Mark that cluster as `"mode":
-"import"` in `clusters.json` so dashboard GPU-model inference reads its imported
-node inventory instead of querying the web host's local Slurm controller.
+The quoted wildcard is expanded by the management command. It imports each matched history file once and uses the matching `.out.json` sidecar to interpret its columns. `--start`/`--end` describe the initialization range in database metadata; they do not filter the contents of the supplied files. Ensure the export files themselves cover the history you intend to import.
 
+Supplying `--accounts-file` is important for remote clusters: it imports that cluster's account hierarchy and associations rather than accidentally querying the dashboard host's local `sacctmgr`. Likewise, the node and partition JSON files populate that cluster's current inventory snapshots. If you intentionally have no account export, add `--no-accounts` to avoid querying local `sacctmgr`; be aware that hierarchical account views may then be incomplete. Node and partition inventory will not be refreshed unless their respective files are supplied.
 
+### C. Routine update of the same database
+
+For later updates, **do not run the initial full-history collection every time**. Collect a recent range with an overlap so recently completed jobs and accounting corrections are picked up. For example, collect October 10 through October 13 (the end date is exclusive), transfer the newly generated `.out` files and the latest metadata JSON files, then run:
+
+```bash
+export SLURM_DUCKDB_PATH=/workspace/data/cluster2.duckdb
+
+python /workspace/manage.py refresh_slurm_db \
+  --history-file '/workspace/import/cluster2/sacct_*.out' \
+  --accounts-file /workspace/import/cluster2/accounts.json \
+  --nodes-file /workspace/import/cluster2/nodes.json \
+  --partitions-file /workspace/import/cluster2/partitions.json \
+  --start 2026-10-10 \
+  --end 2026-10-13
+```
+
+Use the newly collected files or a directory containing only the intended update files. Do not point the update command at an archive of all years of `.out` files unless you deliberately want to reimport that archive. Reimporting overlapping records is supported, but unnecessary full-history imports take longer.
+
+The file-based `refresh_slurm_db` path delegates to `initialize_slurm`, reusing the existing parser and database upsert logic:
+
+- New job and step records are inserted.
+- Existing matching job and step records are updated rather than duplicated.
+- Supplied account/association, node, and partition metadata refreshes the corresponding current snapshots.
+- Historical job and step rows outside the new collection window are preserved.
+- Metadata files omitted from the command are left unchanged by that file-based invocation.
+
+The `--start` and `--end` flags do not filter records inside the files; they set initialization metadata. The collector's date range controls which records are actually present in the export. Keep the cluster's `SLURM_DUCKDB_PATH` consistent with its `db_path` in `clusters.json`. Never import a remote cluster's files into another cluster's database.
+
+### D. Update a local cluster directly
+
+If the application host can query the local Slurm cluster, use the existing incremental database refresh without file arguments:
+
+```bash
+python /workspace/manage.py refresh_slurm_db \
+  --overlap-minutes 60 \
+  --chunk-days 3
+```
+
+The command uses the saved `initialized_through` cursor, re-queries an overlap window, and updates persistent job and step accounting. On the first run, initialize the database first. For an explicit repair range, supply `--start` and `--end`; reduce `--chunk-days` if SlurmDBD reports `slurm_pack_list: size limit exceeded`.
+
+`refresh_slurm_db` updates the persistent historical accounting database. `refresh_slurm` is a separate command for the live in-memory snapshot/cache and local node inventory. Keep those roles distinct.
+
+### E. Verify the import
+
+After a successful import, check the command summary for job/step counts and metadata import messages. Then confirm that the dashboard cluster route uses the same DuckDB file. You can also run an existing YAML report against that database:
+
+```bash
+SLURM_DUCKDB_PATH=/workspace/data/cluster2.duckdb \
+  python -m slurm_analytics.cli report accounts --output /workspace/accounts.yaml
+```
+
+Back up the database before a large initial import or historical repair. Do not run concurrent import/refresh writers against the same DuckDB file. If an import fails, inspect the error before retrying and verify that the correct database path and matching sidecar files were used.
