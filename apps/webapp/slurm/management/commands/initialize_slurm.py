@@ -151,6 +151,12 @@ class Command(BaseCommand):
             metavar="JSON",
             help="Import node inventory from JSON produced by the standalone Slurm exporter",
         )
+        parser.add_argument(
+            "--partitions-file",
+            default=None,
+            metavar="JSON",
+            help="Import partition inventory from JSON produced by the standalone Slurm exporter",
+        )
 
     def handle(self, *args, **options):
         start = parse_dt(options["start"])
@@ -323,6 +329,31 @@ class Command(BaseCommand):
                 raise self.CommandError("Unable to import node inventory {}: {}".format(nodes_file, exc))
             self.stdout.write(self.style.SUCCESS(
                 "Imported node inventory: {} nodes from {}".format(node_frame.height, nodes_file)
+            ))
+
+        partitions_file = options.get("partitions_file")
+        if partitions_file:
+            try:
+                with open(partitions_file, "r", encoding="utf-8") as handle:
+                    partition_data = json.load(handle)
+                raw_partitions = partition_data.get("scontrol_output", "") if isinstance(partition_data, dict) else ""
+                if not raw_partitions.strip():
+                    raise ValueError("JSON contains no scontrol_output")
+                from slurm_analytics.partition_inventory import parse_scontrol_partitions
+                from slurm_analytics.storage import replace_partition_inventory
+                partition_frame = parse_scontrol_partitions(raw_partitions)
+                if partition_frame.is_empty():
+                    raise ValueError("No partitions could be parsed from scontrol output")
+                replace_partition_inventory(partition_frame)
+                con = connect()
+                try:
+                    set_metadata(con, "cluster_mode", "import")
+                finally:
+                    con.close()
+            except (OSError, ValueError, TypeError, KeyError) as exc:
+                raise self.CommandError("Unable to import partition inventory {}: {}".format(partitions_file, exc))
+            self.stdout.write(self.style.SUCCESS(
+                "Imported partition inventory: {} partitions from {}".format(partition_frame.height, partitions_file)
             ))
 
         # Mark initialization complete.

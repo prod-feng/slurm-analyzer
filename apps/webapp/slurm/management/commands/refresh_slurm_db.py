@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from django.core.management import call_command
 from django.core.management.base import BaseCommand
 
 from slurm_analytics.pipeline import ingest_sacct
@@ -73,8 +74,35 @@ class Command(BaseCommand):
         parser.add_argument("--end", default=None)
         parser.add_argument("--timeout", type=int, default=1800)
         parser.add_argument("--no-accounts", action="store_true")
+        parser.add_argument(
+            "--history-file", nargs="+", default=None, metavar="FILE",
+            help="Import collected sacct output files instead of querying sacct directly",
+        )
+        parser.add_argument("--accounts-file", default=None, metavar="JSON")
+        parser.add_argument("--nodes-file", default=None, metavar="JSON")
+        parser.add_argument("--partitions-file", default=None, metavar="JSON")
 
     def handle(self, *args, **options):
+        # Use the existing initializer/importer for collected sacct files. This
+        # keeps local and remote file-based refreshes on the same parsing and
+        # DuckDB upsert path without duplicating ingestion logic here.
+        if options.get("history_file"):
+            import_end = options.get("end") or datetime.now(UTC).isoformat()
+            call_options = {
+                "start": options.get("start") or "1970-01-01",
+                "end": import_end,
+                "clusters": options["clusters"],
+                "chunk_days": options["chunk_days"],
+                "timeout": options["timeout"],
+                "no_accounts": options["no_accounts"],
+                "history_file": options["history_file"],
+            }
+            for key in ("accounts_file", "nodes_file", "partitions_file"):
+                if options.get(key):
+                    call_options[key] = options[key]
+            call_command("initialize_slurm", **call_options)
+            return
+
         if options["chunk_days"] < 1:
             raise self.CommandError("--chunk-days must be positive")
 

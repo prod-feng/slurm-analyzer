@@ -8,6 +8,7 @@ import polars as pl
 
 from slurm_analytics.analytics import analyze_jobs
 from slurm_analytics.node_inventory import refresh_node_inventory
+from slurm_analytics.partition_inventory import refresh_partition_inventory
 from slurm_analytics.pipeline import IngestionResult, ingest_sacct
 from slurm_analytics.sacct import SacctConfig
 from slurm_analytics.sacctmgr import add_hierarchy, fetch_accounts, fetch_associations
@@ -145,6 +146,10 @@ def refresh_slurm(sacct_config=None, refresh_nodes=True):
     nodes = None
     if refresh_nodes:
         nodes = refresh_node_inventory()
+        try:
+            refresh_partition_inventory()
+        except Exception:
+            logger.exception("Unable to refresh Slurm partition inventory.")
 
     snapshot = SlurmSnapshot(
         ingestion=ingestion,

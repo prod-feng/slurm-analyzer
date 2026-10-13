@@ -302,6 +302,59 @@ def load_node_inventory(path=None):
         con.close()
 
 
+
+def replace_partition_inventory(partitions, path=None):
+    """Replace the current partition metadata snapshot in this cluster's DuckDB."""
+    con = connect(path)
+    try:
+        ensure_metadata(con)
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS partition_inventory (
+                partition_name VARCHAR PRIMARY KEY,
+                state VARCHAR, nodes VARCHAR, default_flag VARCHAR, max_time VARCHAR,
+                total_cpus VARCHAR, total_nodes VARCHAR, allow_accounts VARCHAR,
+                allow_groups VARCHAR, allow_qos VARCHAR, deny_accounts VARCHAR,
+                deny_qos VARCHAR, default_mem_per_cpu VARCHAR, default_mem_per_node VARCHAR,
+                max_mem_per_cpu VARCHAR, max_mem_per_node VARCHAR, priority_tier VARCHAR,
+                tres VARCHAR, raw_output VARCHAR, collected_at TIMESTAMP
+            )
+        """)
+        con.execute("DELETE FROM partition_inventory")
+        if partitions is not None and not partitions.is_empty():
+            wanted = [
+                "partition_name", "state", "nodes", "default_flag", "max_time",
+                "total_cpus", "total_nodes", "allow_accounts", "allow_groups",
+                "allow_qos", "deny_accounts", "deny_qos", "default_mem_per_cpu",
+                "default_mem_per_node", "max_mem_per_cpu", "max_mem_per_node",
+                "priority_tier", "tres", "raw_output", "collected_at",
+            ]
+            rows = []
+            for row in partitions.to_dicts():
+                rows.append(tuple(
+                    row.get(col).isoformat() if col == "collected_at" and hasattr(row.get(col), "isoformat")
+                    else (None if row.get(col) is None else str(row.get(col)))
+                    for col in wanted
+                ))
+            con.executemany(
+                "INSERT OR REPLACE INTO partition_inventory VALUES (" + ",".join(["?"] * len(wanted[:-1])) + ", TRY_CAST(? AS TIMESTAMP))",
+                rows,
+            )
+        set_metadata(con, "partitions_imported", "true")
+    finally:
+        con.close()
+
+
+def load_partition_inventory(path=None):
+    """Load the saved partition metadata snapshot, or return an empty frame."""
+    con = connect(path)
+    try:
+        tables = {row[0] for row in con.execute("SHOW TABLES").fetchall()}
+        if "partition_inventory" not in tables:
+            return pl.DataFrame()
+        return fetch_polars_old(con, "SELECT * FROM partition_inventory ORDER BY partition_name")
+    finally:
+        con.close()
+
 def query_df(sql, params=None, path=None, schema=None):
     """Execute a query and return a Polars frame.
 

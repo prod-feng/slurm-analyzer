@@ -2,7 +2,7 @@
 """Export Slurm history and cluster metadata without installing the dashboard.
 
 Compatible with Python 3.6. Requires only access to sacct, sacctmgr, and scontrol.
-Outputs sacct .out files plus .out.json sidecars, accounts.json, and nodes.json.
+Outputs sacct .out files plus .out.json sidecars, accounts.json, nodes.json, and partitions.json.
 """
 from __future__ import print_function
 import argparse
@@ -124,6 +124,18 @@ def export_nodes(outdir):
     print("Exported node inventory (approximately {} nodes): {}".format(count, path))
 
 
+
+def export_partitions(outdir):
+    output = run(["scontrol", "show", "partition", "-o"], timeout=300)
+    if not output.strip():
+        raise RuntimeError("scontrol returned empty partition inventory")
+    path = os.path.join(outdir, "partitions.json")
+    with open(path, "w") as handle:
+        json.dump({"format_version": 1, "scontrol_output": output}, handle)
+        handle.write("\n")
+    count = sum(1 for line in output.splitlines() if "PartitionName=" in line)
+    print("Exported partition inventory ({} partitions): {}".format(count, path))
+
 def collect_chunk(start, end, outdir):
     stamp = lambda value: value.strftime("%Y%m%dT%H%M%S")
     filename = "sacct_{}_{}.out".format(stamp(start), stamp(end))
@@ -160,6 +172,7 @@ def main():
     parser.add_argument("--skip-jobs", action="store_true")
     parser.add_argument("--skip-accounts", action="store_true")
     parser.add_argument("--skip-nodes", action="store_true")
+    parser.add_argument("--skip-partitions", action="store_true")
     args = parser.parse_args()
     if args.chunk_days < 1:
         parser.error("--chunk-days must be at least 1")
@@ -179,6 +192,8 @@ def main():
         export_accounts(args.output_dir)
     if not args.skip_nodes:
         export_nodes(args.output_dir)
+    if not args.skip_partitions:
+        export_partitions(args.output_dir)
     print("Export complete: {}".format(os.path.abspath(args.output_dir)))
 
 
