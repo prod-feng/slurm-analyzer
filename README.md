@@ -39,6 +39,16 @@ The `db_path` must be writable by the Django process. Back up each DuckDB databa
 For a remote cluster, the workflow has three stages:
 
 1. **Export on the source cluster:** run `tools/export_slurm_cluster.py` on a host that can access that cluster's Slurm commands. It collects historical `sacct` records in chunks and exports the current account/association, node, and partition metadata.
+   
+   This ```tools/export_slurm_cluster.py``` is a ```standalone``` ```python 3.6``` compatible script, meaning you can copy it to ```anywhere``` to run, ```without``` installing the whole package.
+   Please be careful about the ```--chunk-days```, which will request ```xxx``` days' data at a time. If your cluster if very big, you might need to set it to be
+   shorter, like 10 days, otherwise it might take very long time, and also might get timeout from the local database and fails.
+
+   Also, please do not change the ```FIELDS``` randomly inside this script, it must be the same as the ```SACCT_FIELDS``` in source file ```apps/slurm_analytics/sacct.py```.
+   
+```
+ time ./apps/tools/export_slurm_cluster.py  --start 2025-05-01   --end 2026-10-09   --chunk-days 90 --output-dir ./apps/rawdata/
+```
 2. **Transfer the export:** copy the generated files to the dashboard host, keeping each cluster's files in its own directory. Keep every `sacct_*.out` file with its matching `.out.json` sidecar.
 3. **Import into that cluster's database:** run `initialize_slurm` for the first import, then `refresh_slurm_db` with newly collected files for routine updates. Set `SLURM_DUCKDB_PATH` to the database configured for that cluster.
 
