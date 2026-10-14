@@ -9,6 +9,40 @@ A Django-based dashboard and CLI for exploring Slurm accounting history, resourc
 
 <img width="" height="268" alt="Screenshot 2026-10-11 at 2 15 34 PM" src="https://github.com/user-attachments/assets/de8dc520-17b1-4cbc-a39c-7b2b93b00ce5" />
 
+## Quick Start
+For a quick start, I will use the Singularity container to deploy, test, and work in production.
+1. go to ```appraiser/``` folder,
+
+```
+singularity build --fakeroot   slurm-manager-ldap-django.sif  slurm-manager.def
+```
+2. Add your local IP address in to ```ALLOWED_HOSTS ``` of file ```apps/slurm_web/settings.py```.
+
+```
+ALLOWED_HOSTS = [
+    "127.0.0.1",
+    "localhost",
+    "x.x.x.x",
+]
+```
+3. Export Slurm data, please see ```"Data flow at a glance"``` below.
+4. Initialize import Slurm data into DuckDB.
+
+```
+./run_me_initialize.sh
+```
+5. Start the app in development mode
+
+```
+./run_me.sh start
+```
+Finally, 
+
+6. Run in production using ```Gunicorn```
+
+```
+./run_production.sh
+```
 ## Multi-cluster mode
 
 One webapp can serve multiple Slurm clusters. Each cluster has its own DuckDB database, while all clusters use the same dashboard code and tabs. The top navigation switches between cluster pages.
