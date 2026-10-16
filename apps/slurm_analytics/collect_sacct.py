@@ -19,6 +19,9 @@ FIELDS = [
     "exitcode", "state", "nnodes", "ntasks", "ncpus", "reqcpus",
     "reqmem", "reqtres", "alloctres", "timelimit",
     "nodelist", "jobname", "tresusageintot",
+    "gresusageinave",
+    "gresusageinmax",
+    "gresusageintot",
     "tresusageinave", "tresusageinmax", "avecpu",
     "totalcpu", "maxrss", "maxvmsize", "maxdiskread", "maxdiskwrite",
 ]

@@ -174,3 +174,28 @@ def test_gpu_memory():
         == 4 * 1024 ** 3
     )
 
+
+
+def test_parse_gpu_count_prefers_typed_counts_over_aggregate_total():
+    # The generic total and typed values describe the same GPUs.
+    assert parse_gpu_count("gres/gpu=4,gres/gpu:a100=4") == 4.0
+
+
+def test_parse_gpu_count_sums_multiple_typed_gpu_models_without_generic_double_count():
+    assert parse_gpu_count("gres/gpu=10,gres/gpu:a100=8,gres/gpu:h100=2") == 10.0
+
+
+def test_parse_gpu_count_supports_generic_gpu_count():
+    assert parse_gpu_count("cpu=8,gres/gpu=2,node=1") == 2.0
+
+
+def test_gpu_utilization_from_gres_usage_in_ave_short_key():
+    assert parse_gpu_utilization("gpuutil=99,gpumem=22524M") == 99.0
+
+
+def test_gpu_utilization_key_is_case_insensitive():
+    assert parse_gpu_utilization("GPUUTIL=76.5") == 76.5
+
+
+def test_gpu_memory_from_gres_usage_in_ave_short_key():
+    assert parse_gpu_memory("gpumem=4G") == 4 * 1024 ** 3

@@ -84,6 +84,17 @@ def _usage_sql(table, name_column, clauses):
 
     job_read = disk_gib("maxdiskread", "j", available_columns)
     job_write = disk_gib("maxdiskwrite", "j", available_columns)
+    if "alloctres" in available_columns:
+        # Prefer model-specific TRES counts when present. Slurm may report both
+        # gres/gpu=N and gres/gpu:<model>=N, where the generic value is an
+        # aggregate, not an extra allocation. This also corrects older rows
+        # whose persisted gpu_count was calculated by summing both forms.
+        typed_gpu_counts = r"regexp_extract_all(CAST(j.alloctres AS VARCHAR), 'gres/gpu:[^=,]+=([0-9]+(?:\.[0-9]+)?)', 1)"
+        gpu_count_expr = r"COALESCE(list_sum(list_transform({typed}, x -> TRY_CAST(x AS DOUBLE))), TRY_CAST(regexp_extract(CAST(j.alloctres AS VARCHAR), '(?:^|,)gres/gpu=([0-9]+(?:\.[0-9]+)?)', 1) AS DOUBLE), TRY_CAST(j.gpu_count AS DOUBLE), 0.0)".format(typed=typed_gpu_counts)
+    elif "gpu_count" in available_columns:
+        gpu_count_expr = "COALESCE(TRY_CAST(j.gpu_count AS DOUBLE), 0.0)"
+    else:
+        gpu_count_expr = "0.0"
     step_read = disk_gib("maxdiskread", "js", step_columns)
     step_write = disk_gib("maxdiskwrite", "js", step_columns)
     step_tasks = "TRY_CAST(js.ntasks AS DOUBLE)" if "ntasks" in step_columns else "NULL::DOUBLE"
@@ -114,7 +125,7 @@ def _usage_sql(table, name_column, clauses):
                COUNT(*) AS jobs,
                SUM(COALESCE(TRY_CAST(j.nnodes AS DOUBLE), 0)) AS allocated_nodes,
                SUM(COALESCE(TRY_CAST(j.ncpus AS DOUBLE), 0) * COALESCE(TRY_CAST(j.elapsed_seconds AS DOUBLE), 0)) / 3600.0 AS cpu_hours,
-               SUM(COALESCE(TRY_CAST(j.gpu_count AS DOUBLE), 0) * COALESCE(TRY_CAST(j.elapsed_seconds AS DOUBLE), 0)) / 3600.0 AS gpu_hours,
+               SUM(({gpu_count}) * COALESCE(TRY_CAST(j.elapsed_seconds AS DOUBLE), 0)) / 3600.0 AS gpu_hours,
                SUM(({memory_bytes} / 1073741824.0) * COALESCE(TRY_CAST(j.elapsed_seconds AS DOUBLE), 0)) / 3600.0 AS memory_gb_hours,
                MAX(COALESCE(TRY_CAST(j.gpu_mem_max_bytes AS DOUBLE), 0)) / 1073741824.0 AS gpu_memory_gb,
                SUM(COALESCE(TRY_CAST(j.elapsed_seconds AS DOUBLE), 0)) / 3600.0 AS elapsed_hours,
@@ -127,7 +138,7 @@ def _usage_sql(table, name_column, clauses):
     """.format(
         name_column=name_column, table=table, where=where, step_io_sql=step_io_sql,
         memory_bytes=memory_bytes, read_gib=read_gib, write_gib=write_gib,
-        tasks_expr=tasks_expr,
+        tasks_expr=tasks_expr, gpu_count=gpu_count_expr,
     )
 
 

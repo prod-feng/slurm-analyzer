@@ -23,6 +23,7 @@ def cluster_route(view):
 urlpatterns = [
     path("metadata/", cluster_route(api.api_metadata), name="api-metadata"),
     path("summary/", cluster_route(api.api_summary), name="api-summary"),
+    path("additional-job-metrics/", cluster_route(api.api_additional_job_metrics), name="api-additional-job-metrics"),
     path("users/", cluster_route(api.api_users), name="api-users"),
     path("partitions/", cluster_route(api.api_partitions), name="api-partitions"),
     path("partitions/usage/", cluster_route(api.api_partition_usage), name="api-partition-usage"),
@@ -38,4 +39,5 @@ urlpatterns = [
     path("accounts/", cluster_route(api.api_account_usage), name="api-account-usage"),
     path("accounts/tree/", cluster_route(api.api_account_tree), name="api-account-tree"),
     path("users/usage/", cluster_route(api.api_user_usage), name="api-user-usage"),
+    path("resource-efficiency/", cluster_route(api.api_resource_efficiency), name="api-resource-efficiency"),
 ]

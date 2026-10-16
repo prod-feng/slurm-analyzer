@@ -349,31 +349,28 @@ def parse_gpu_count(value):
 
     parsed = parse_tres(value)
 
+    # Slurm may report both the aggregate gres/gpu count and model-specific
+    # gres/gpu:<type> entries in the same TRES string.  The aggregate is a
+    # summary of the typed counts, not an additional allocation.  Prefer the
+    # typed entries when present to avoid double-counting GPU-hours.
+    typed = [
+        val for key, val in parsed.items()
+        if key.startswith("gres/gpu:")
+    ]
+    values = typed or ([parsed["gres/gpu"]] if "gres/gpu" in parsed else [])
+    if not values:
+        return None
+
     total = 0.0
     found = False
-
-    for key, val in parsed.items():
-
-        if not (
-            key == "gres/gpu"
-            or key.startswith("gres/gpu:")
-        ):
-            continue
-
+    for val in values:
         try:
             total += float(val)
             found = True
-
-        except (
-            ValueError,
-            TypeError,
-        ):
+        except (ValueError, TypeError):
             continue
 
-    if not found:
-        return None
-
-    return total
+    return total if found else None
 
 
 def parse_gpu_utilization(value):
@@ -382,10 +379,14 @@ def parse_gpu_utilization(value):
     """
 
     parsed = parse_tres(value)
-
-    raw = parsed.get(
-        "gres/gpuutil"
-    )
+    # Field names and Slurm versions differ: TRESUsageInAve commonly uses
+    # gres/gpuutil, while GresUsageInAve commonly uses gpuutil.
+    normalized = {str(key).strip().lower(): val for key, val in parsed.items()}
+    raw = normalized.get("gres/gpuutil")
+    if raw is None:
+        raw = normalized.get("gpuutil")
+    if raw is None:
+        raw = normalized.get("gpu/util")
 
     if raw is None:
         return None
@@ -407,8 +408,11 @@ def parse_gpu_memory(value):
     """
 
     parsed = parse_tres(value)
-
-    return parse_slurm_memory(
-        parsed.get("gres/gpumem")
-    )
+    normalized = {str(key).strip().lower(): val for key, val in parsed.items()}
+    raw = normalized.get("gres/gpumem")
+    if raw is None:
+        raw = normalized.get("gpumem")
+    if raw is None:
+        raw = normalized.get("gpu/mem")
+    return parse_slurm_memory(raw)
 

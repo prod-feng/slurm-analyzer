@@ -5,7 +5,7 @@
 <title>{{ active_cluster.name|escape }} · Slurm Analytics</title>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <style>
-body{margin:0;padding:24px;font-family:Arial,sans-serif;background:#f5f7fa;color:#222}h1{margin-top:0}.cluster-nav{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 20px}.cluster-nav a{display:inline-block;padding:9px 14px;border-radius:6px;background:#e2e6eb;color:#222;text-decoration:none;font-weight:600}.cluster-nav a.active{background:#26384a;color:#fff}.tabs{display:flex;gap:4px;margin:18px 0}.tab{border:0;background:#ddd;padding:10px 18px;border-radius:6px;cursor:pointer}.tab.active{background:#333;color:#fff}.panel{display:none}.panel.active{display:block}.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:24px}.card,.chart,.tablebox{background:#fff;border-radius:8px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.12)}.card-title{color:#666;font-size:14px}.card-value{font-size:30px;font-weight:bold;margin-top:8px}.toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;background:#fff;padding:12px 16px;border-radius:8px;margin-bottom:20px}.toolbar label{font-weight:600}.toolbar input,.toolbar select,.toolbar button{padding:6px 8px}.muted{color:#666;font-size:13px;margin-left:auto}.hint{color:#666;font-size:13px;width:100%}.charts{display:grid;grid-template-columns:1fr 1fr;gap:20px}.wide{grid-column:1/-1}.chart{min-height:390px}.pie-chart{min-height:430px}.error{color:#b00020;padding:12px}.tablebox{overflow:auto}table{border-collapse:collapse;width:100%;font-size:14px}th,td{text-align:left;padding:8px;border-bottom:1px solid #eee;white-space:nowrap}th{position:sticky;top:0;background:#fafafa}th button{border:0;background:transparent;font:inherit;font-weight:700;cursor:pointer;padding:0}.num{text-align:right}.sort-indicator{color:#666;font-size:11px}.indent{padding-left:calc(8px + var(--level)*20px)}.account-level-group{grid-column:1/-1}.account-level-title{margin:8px 0 0}.account-level-charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.custom-range{display:none}.custom-range.visible{display:inline-flex;gap:8px;align-items:center}.metric-details{background:#fff;border-radius:8px;padding:14px 18px;margin:14px 0;box-shadow:0 1px 4px rgba(0,0,0,.08)}.metric-details>summary{cursor:pointer;font-weight:600}.metric-details .charts{margin-top:16px}.account-gpu-model-pies{display:block!important;width:100%}.account-gpu-model-pies>.account-level-title{margin:18px 0 8px}.account-gpu-model-pies>.account-level-charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;gap:20px;margin:0 0 18px;justify-items:stretch;align-items:stretch}.account-gpu-model-pies .chart{min-width:0;width:auto;box-sizing:border-box}.account-gpu-model-pies .chart>div{width:100%;min-width:0}.metric-details .cards{margin-top:14px}.loading-indicator{display:none;align-items:center;gap:8px;color:#555;font-size:13px}.loading-indicator.visible{display:inline-flex}.spinner{width:14px;height:14px;border:2px solid #d7dce2;border-top-color:#333;border-radius:50%;display:inline-block;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.cluster-nav a.cluster-nav-disabled{pointer-events:none;cursor:wait;opacity:.55}.cluster-nav a.cluster-nav-disabled.active{opacity:.75}button:disabled{opacity:.6;cursor:wait}@media(max-width:1100px){.cards{grid-template-columns:repeat(2,1fr)}.charts,.account-level-charts{grid-template-columns:1fr}.wide,.account-level-group{grid-column:auto}}@media(max-width:700px){body{padding:12px}.cards{grid-template-columns:1fr}.custom-range.visible{width:100%;flex-wrap:wrap}}
+body{margin:0;padding:24px;font-family:Arial,sans-serif;background:#f5f7fa;color:#222}h1{margin-top:0}.cluster-nav{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 20px}.cluster-nav a{display:inline-block;padding:9px 14px;border-radius:6px;background:#e2e6eb;color:#222;text-decoration:none;font-weight:600}.cluster-nav a.active{background:#26384a;color:#fff}.tabs{display:flex;gap:4px;margin:18px 0}.tab{border:0;background:#ddd;padding:10px 18px;border-radius:6px;cursor:pointer}.tab.active{background:#333;color:#fff}.panel{display:none}.panel.active{display:block}.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:24px}.card,.chart,.tablebox{background:#fff;border-radius:8px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.12)}.card-title{color:#666;font-size:14px}.card-value{font-size:30px;font-weight:bold;margin-top:8px}.toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;background:#fff;padding:12px 16px;border-radius:8px;margin-bottom:20px}.toolbar label{font-weight:600}.toolbar input,.toolbar select,.toolbar button{padding:6px 8px}.muted{color:#666;font-size:13px;margin-left:auto}.hint{color:#666;font-size:13px;width:100%}.charts{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:stretch}.efficiency-charts{display:grid;grid-template-columns:minmax(0,1fr);gap:20px}.waiting-chart{grid-column:1/-1}.waiting-chart{min-height:380px;height:380px;padding-bottom:10px}.waiting-chart>div{height:350px;min-height:350px;max-height:350px;overflow:hidden}.efficiency-charts .chart{min-height:520px}.efficiency-charts .chart>div{height:480px}.wide{grid-column:1/-1}.chart{min-height:390px;min-width:0;box-sizing:border-box;position:relative}.chart>div{height:350px;min-width:0;width:100%}.chart.wide>div{height:390px}#resource-chart{height:390px!important;min-height:390px;max-height:390px;overflow:hidden}.pie-chart{min-height:430px}.pie-chart>div{height:390px}.error{color:#b00020;padding:12px}.tablebox{overflow:auto}table{border-collapse:collapse;width:100%;font-size:14px}th,td{text-align:left;padding:8px;border-bottom:1px solid #eee;white-space:nowrap}th{position:sticky;top:0;background:#fafafa}th button{border:0;background:transparent;font:inherit;font-weight:700;cursor:pointer;padding:0}.num{text-align:right}.sort-indicator{color:#666;font-size:11px}.indent{padding-left:calc(8px + var(--level)*20px)}.account-main-pies{display:grid;grid-template-columns:minmax(0,1fr);gap:20px}.account-level-group{grid-column:1/-1}.account-level-title{margin:8px 0 0}.account-level-charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.custom-range{display:none}.custom-range.visible{display:inline-flex;gap:8px;align-items:center}.metric-details{background:#fff;border-radius:8px;padding:14px 18px;margin:14px 0;box-shadow:0 1px 4px rgba(0,0,0,.08)}.metric-details>summary{cursor:pointer;font-weight:600}.metric-details .charts{margin-top:16px;clear:both;position:relative}.metric-details>summary{position:relative;z-index:1}.account-gpu-model-pies{display:block!important;width:100%}.account-gpu-model-pies>.account-level-title{margin:18px 0 8px}.account-gpu-model-pies>.account-level-charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;gap:20px;margin:0 0 18px;justify-items:stretch;align-items:stretch}.account-gpu-model-pies .chart{min-width:0;width:auto;box-sizing:border-box}.account-gpu-model-pies .chart>div{width:100%;min-width:0}.metric-details .cards{margin-top:14px}.additional-metrics-status{display:flex;align-items:center;gap:12px;width:100%;box-sizing:border-box;margin:14px 0;padding:14px 16px;border-radius:8px;font-size:15px;font-weight:600;line-height:1.45}.additional-metrics-status.is-loading{color:#063b76;background:#e6f3ff;border:2px solid #1683e8;box-shadow:0 0 0 3px rgba(22,131,232,.12)}.additional-metrics-status.is-loaded{color:#17633a;background:#e8f8ee;border:1px solid #76c893}.additional-metrics-status.is-error{color:#8c1522;background:#fff0f1;border:1px solid #df6c77}.additional-metrics-status .status-copy{display:flex;flex-direction:column;gap:3px}.additional-metrics-status .status-detail{font-size:13px;font-weight:400;color:inherit;opacity:.9}.spinner{width:24px;height:24px;flex:0 0 24px;box-sizing:border-box;border:4px solid #b8dcff;border-top-color:#0875df;border-right-color:#0875df;border-radius:50%;display:inline-block;animation:spin .75s linear infinite;filter:drop-shadow(0 0 2px rgba(8,117,223,.25))}@keyframes spin{to{transform:rotate(360deg)}}.loading-indicator{display:none;align-items:center;gap:8px;color:#555;font-size:13px}.loading-indicator.visible{display:inline-flex}.cluster-nav a.cluster-nav-disabled{pointer-events:none;cursor:wait;opacity:.55}.cluster-nav a.cluster-nav-disabled.active{opacity:.75}button:disabled{opacity:.6;cursor:wait}@media(max-width:1100px){.cards{grid-template-columns:repeat(2,1fr)}.charts,.account-level-charts{grid-template-columns:1fr}.wide,.account-level-group{grid-column:auto}}@media(max-width:700px){body{padding:12px}.cards{grid-template-columns:1fr}.custom-range.visible{width:100%;flex-wrap:wrap}}
 </style>
 </head>
 <body>
@@ -18,17 +18,18 @@ body{margin:0;padding:24px;font-family:Arial,sans-serif;background:#f5f7fa;color
 <div class="toolbar">
   <label>History <select id="range"><option value="24h">24 hours</option><option value="7d" selected>7 days</option><option value="30d">30 days</option><option value="90d">90 days</option><option value="180d">180 days</option><option value="1y">1 year</option><option value="custom">Custom range</option></select></label>
   <span id="custom-range" class="custom-range"><label>Start <input id="custom-start" type="datetime-local"></label><label>End <input id="custom-end" type="datetime-local"></label><button id="apply-range">Apply</button></span>
-  <label>Bucket <select id="interval"><option value="15m">15 min</option><option value="1h">1 hour</option><option value="6h">6 hours</option><option value="1d" selected>1 day</option></select></label>
+  <label>Bucket <select id="interval"><option value="15m">15 min</option><option value="1h">1 hour</option><option value="6h">6 hours</option><option value="1d" selected>1 day</option><option value="1w">1 week</option><option value="1mo">1 month</option></select></label>
   <span id="loading-indicator" class="loading-indicator" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span><span>Reloading data…</span></span><span id="refreshed" class="muted"></span>
 </div>
 <div class="tabs">
 <button class="tab active" data-panel="overview">Overview</button>
 <button class="tab" data-panel="users">Users</button>
 <button class="tab" data-panel="accounts">Accounts</button>
+<button class="tab" data-panel="efficiency">Efficiency</button>
 <button class="tab" data-panel="partitions">Partitions</button>
 </div>
 <section id="overview" class="panel active">
-<div class="cards"><div class="card"><div class="card-title">Completed (ended in range)</div><div id="completed-count" class="card-value">-</div></div><div class="card"><div class="card-title">Cancelled (ended in range)</div><div id="cancelled-count" class="card-value">-</div></div><div class="card"><div class="card-title">Failed (ended in range)</div><div id="failed-count" class="card-value">-</div></div><div class="card"><div class="card-title">Other terminal jobs (ended in range)</div><div id="other-count" class="card-value">-</div></div><div class="card"><div class="card-title">Running now (live queue)</div><div id="running-count" class="card-value">-</div></div><div class="card"><div class="card-title">Pending now (live queue)</div><div id="pending-count" class="card-value">-</div></div><div class="card"><div class="card-title">CPU hours (jobs started in range)</div><div id="cpu-hours" class="card-value">-</div></div><div class="card"><div class="card-title">GPU hours (jobs started in range)</div><div id="gpu-hours" class="card-value">-</div></div></div><details class="metric-details"><summary>Show additional job metrics</summary><div class="cards">
+<div class="cards"><div class="card"><div class="card-title">Completed (ended in range)</div><div id="completed-count" class="card-value">-</div></div><div class="card"><div class="card-title">Cancelled (ended in range)</div><div id="cancelled-count" class="card-value">-</div></div><div class="card"><div class="card-title">Failed (ended in range)</div><div id="failed-count" class="card-value">-</div></div><div class="card"><div class="card-title">Other terminal jobs (ended in range)</div><div id="other-count" class="card-value">-</div></div><div class="card"><div class="card-title">Running now (live queue)</div><div id="running-count" class="card-value">-</div></div><div class="card"><div class="card-title">Pending now (live queue)</div><div id="pending-count" class="card-value">-</div></div><div class="card"><div class="card-title">CPU hours (jobs started in range)</div><div id="cpu-hours" class="card-value">-</div></div><div class="card"><div class="card-title">GPU hours (jobs started in range)</div><div id="gpu-hours" class="card-value">-</div></div></div><details id="overview-additional-job-metrics" class="metric-details"><summary>Show additional job metrics (load on demand)</summary><div id="overview-additional-job-metrics-status" class="hint" role="status">Open this section to calculate detailed per-job metrics, including metrics that read job_steps.</div><div class="cards">
 <div class="card"><div class="card-title">Maximum CPUs per job (terminal jobs)</div><div id="peak-cpus" class="card-value">-</div></div><div class="card"><div class="card-title">Maximum GPUs per job (terminal jobs)</div><div id="peak-gpus" class="card-value">-</div></div><div class="card"><div class="card-title">Maximum requested RAM per job (estimated total)</div><div id="peak-ram" class="card-value">-</div></div><div class="card"><div class="card-title">Maximum recorded RAM (MaxRSS)</div><div id="peak-recorded-ram" class="card-value">-</div></div><div class="card"><div class="card-title">Maximum recorded GPU memory</div><div id="peak-gpu-ram" class="card-value">-</div></div><div class="card"><div class="card-title">Longest runtime (hours)</div><div id="peak-runtime" class="card-value">-</div></div><div class="card"><div class="card-title">Largest time limit (hours)</div><div id="peak-limit" class="card-value">-</div></div><div class="card"><div class="card-title">Maximum data read (MaxDiskRead)</div><div id="peak-disk-read" class="card-value">N/A</div></div><div class="card"><div class="card-title">Maximum data write (MaxDiskWrite)</div><div id="peak-disk-write" class="card-value">N/A</div></div><div class="card"><div class="card-title">Maximum combined disk I/O</div><div id="peak-disk-io" class="card-value">N/A</div></div>
 <div class="card"><div class="card-title">Maximum nodes per job</div><div id="peak-nodes" class="card-value">N/A</div></div><div class="card"><div class="card-title">Average nodes per job</div><div id="avg-nodes" class="card-value">N/A</div></div><div class="card"><div class="card-title">Maximum tasks per job</div><div id="peak-tasks" class="card-value">N/A</div></div><div class="card"><div class="card-title">Average tasks per job</div><div id="avg-tasks" class="card-value">N/A</div></div></div></details>
 <div class="charts"><div class="chart"><div id="job-flow-chart"></div></div><div class="chart wide"><div id="resource-chart"></div></div></div><details id="overview-extra-charts" class="metric-details"><summary>Load additional charts (CPU, GPU, RAM, runtime)</summary><div class="charts"><div class="chart"><div id="cpu-chart"></div></div><div class="chart"><div id="gpu-chart"></div></div><div class="chart"><div id="memory-chart"></div></div><div class="chart"><div id="runtime-chart"></div></div></div></details>
@@ -36,7 +37,7 @@ body{margin:0;padding:24px;font-family:Arial,sans-serif;background:#f5f7fa;color
 </section>
 <section id="users" class="panel">
 <div class="toolbar"><label>User <input id="user-filter" placeholder="smith* or *zhang*"></label><label>Account <input id="user-account-filter" placeholder="dept.pi.*"></label><button onclick="loadUsers()">Search</button><span class="muted">Resource values use the selected history range.</span></div>
-<div class="charts"><div class="chart pie-chart"><div id="users-cpu-pie"></div></div><div class="chart pie-chart"><div id="users-gpu-pie"></div></div></div><details id="users-gpu-model-details" class="metric-details"><summary>Load GPU model GPU-hours share charts</summary><div class="hint">Each pie compares users’ share of GPU-hours for one GPU model. Models are discovered from current scontrol node inventory and accounting records; generic GPU allocations are inferred from the job node list when possible.</div><div id="users-gpu-model-pies" class="charts"></div></details><details id="users-extra-pies" class="metric-details"><summary>Load additional user charts (jobs, nodes, RAM, tasks, data I/O)</summary><div class="charts"><div class="chart pie-chart"><div id="users-jobs-pie"></div></div><div class="chart pie-chart"><div id="users-nodes-pie"></div></div><div class="chart pie-chart"><div id="users-ram-pie"></div></div><div class="chart pie-chart"><div id="users-tasks-pie"></div></div><div class="chart pie-chart"><div id="users-read-pie"></div></div><div class="chart pie-chart"><div id="users-write-pie"></div></div></div></details>
+<div class="charts"><div class="chart pie-chart"><div id="users-cpu-pie"></div></div><div class="chart pie-chart"><div id="users-gpu-pie"></div></div></div><div class="chart waiting-chart"><div id="users-wait-chart"></div></div><details id="users-gpu-model-details" class="metric-details"><summary>Load GPU model GPU-hours share charts</summary><div class="hint">Each pie compares users’ share of GPU-hours for one GPU model. Models are discovered from current scontrol node inventory and accounting records; generic GPU allocations are inferred from the job node list when possible.</div><div id="users-gpu-model-pies" class="charts"></div></details><details id="users-extra-pies" class="metric-details"><summary>Load additional user charts (jobs, nodes, RAM, tasks, data I/O)</summary><div class="charts"><div class="chart pie-chart"><div id="users-jobs-pie"></div></div><div class="chart pie-chart"><div id="users-nodes-pie"></div></div><div class="chart pie-chart"><div id="users-ram-pie"></div></div><div class="chart pie-chart"><div id="users-tasks-pie"></div></div><div class="chart pie-chart"><div id="users-read-pie"></div></div><div class="chart pie-chart"><div id="users-write-pie"></div></div></div></details>
 <div class="tablebox"><table><thead><tr>
 <th><button onclick="sortUsers('user')">User <span id="sort-user" class="sort-indicator"></span></button></th>
 <th class="num"><button onclick="sortUsers('jobs')">Jobs <span id="sort-jobs" class="sort-indicator"></span></button></th>
@@ -50,7 +51,8 @@ body{margin:0;padding:24px;font-family:Arial,sans-serif;background:#f5f7fa;color
 <section id="accounts" class="panel">
 <div class="toolbar"><label>Account <input id="account-filter" placeholder="dept* or dept.pi.*"></label><button onclick="loadAccounts()">Search</button><span class="muted">“Unknown” means the historical Slurm job accounting record has no account value; it is not a current Slurm account.</span></div>
 <div class="toolbar"><label>Pie metric <select id="account-pie-metric"><option value="jobs">Job count</option><option value="cpu_hours" selected>CPU-hours</option><option value="gpu_hours">GPU-hours</option><option value="memory_gb_hours">Memory GiB-hours</option><option value="elapsed_hours">Elapsed hours</option><option value="total_tasks">Total tasks</option><option value="disk_read_gib">Data read (GiB)</option><option value="disk_write_gib">Data write (GiB)</option></select></label><label>PI filter <select id="pi-dept-filter"><option value="">All departments</option></select></label><label>Project filter <select id="project-pi-filter"><option value="">All PIs</option></select></label><span class="muted">Department and PI charts include descendant projects; project chart shows individual projects.</span></div>
-<div class="charts"><div class="chart pie-chart"><div id="accounts-dept-pie"></div></div><div class="chart pie-chart"><div id="accounts-pi-pie"></div></div><div class="chart pie-chart"><div id="accounts-project-pie"></div></div></div>
+<div class="account-main-pies"><div class="chart pie-chart"><div id="accounts-dept-pie"></div></div><div class="chart pie-chart"><div id="accounts-pi-pie"></div></div><div class="chart pie-chart"><div id="accounts-project-pie"></div></div></div>
+<div class="charts"><div class="chart waiting-chart"><div id="accounts-dept-wait-chart"></div></div><div class="chart waiting-chart"><div id="accounts-pi-wait-chart"></div></div><div class="chart waiting-chart"><div id="accounts-project-wait-chart"></div></div></div>
 <details id="accounts-gpu-model-details" class="metric-details"><summary>Load GPU model GPU-hours share charts by account level</summary><div class="hint">Each model has separate department, PI, and project-level pies, with account hierarchy totals rolled up from child accounts. GPU models are discovered from current scontrol node inventory and accounting records.</div><div id="accounts-gpu-model-pies" class="account-gpu-model-pies"></div></details>
 <details id="accounts-level-details" class="metric-details"><summary>Load resource usage charts by account hierarchy level</summary><div class="hint">Each level begins on a new line. Charts compare accounts at the same depth; parent and child levels are not mixed. Task totals are summed NTasks across jobs; data-read/data-write are summed MaxDiskRead/MaxDiskWrite in GiB.</div><div id="accounts-level-pies" class="charts"></div></details>
 <div class="tablebox"><table><thead><tr>
@@ -63,10 +65,25 @@ body{margin:0;padding:24px;font-family:Arial,sans-serif;background:#f5f7fa;color
 <th class="num"><button onclick="sortAccounts('gpu_memory_gb')">Peak GPU memory GB <span id="asort-gpu_memory_gb" class="sort-indicator"></span></button></th><th class="num"><button onclick="sortAccounts('total_tasks')">Total tasks <span id="asort-total_tasks" class="sort-indicator"></span></button></th><th class="num"><button onclick="sortAccounts('disk_read_gib')">Data read GiB <span id="asort-disk_read_gib" class="sort-indicator"></span></button></th><th class="num"><button onclick="sortAccounts('disk_write_gib')">Data write GiB <span id="asort-disk_write_gib" class="sort-indicator"></span></button></th>
 </tr></thead><tbody id="accounts-body"></tbody></table></div>
 </section>
+<section id="efficiency" class="panel">
+  <div class="hint">Pending and running jobs are excluded from all plots. PREEMPTED, REQUEUED, REVOKED, SUSPENDED, and RESIZING jobs are excluded from efficiency and waiting-time rollups because they may run again; other final states remain available for analysis. CPU = TotalCPU ÷ (allocated CPUs × elapsed time); RAM = peak MaxRSS ÷ allocated memory (AllocTRES mem where available); GPU = recorded Slurm GPU-utilization telemetry. Missing telemetry is excluded, not treated as zero.</div>
+  <div class="chart waiting-chart"><div id="eff-state-chart"></div></div>
+  <div class="toolbar"><label>User filter <input id="eff-user-filter" placeholder="smith* or *zhang*"></label><label>Account filter <input id="eff-account-filter" placeholder="dept.pi.*"></label><button id="eff-search">Search</button><span class="muted">Select a user row to inspect individual jobs.</span></div>
+  <h3>Department-level efficiency</h3>
+  <div class="efficiency-charts"><div class="chart"><div id="eff-dept-cpu"></div></div><div class="chart"><div id="eff-dept-ram"></div></div><div class="chart"><div id="eff-dept-gpu"></div></div></div>
+  <h3>PI-level efficiency</h3>
+  <div class="efficiency-charts"><div class="chart"><div id="eff-pi-cpu"></div></div><div class="chart"><div id="eff-pi-ram"></div></div><div class="chart"><div id="eff-pi-gpu"></div></div></div>
+  <h3>Job waiting time</h3>
+  <div class="hint">Waiting time is start time minus submit time, shown in hours. Summaries include only jobs with both timestamps and a non-negative wait. Average and median are calculated across individual jobs, not across time buckets.</div>
+  <div class="tablebox"><table><thead><tr><th>Group type</th><th>Group</th><th class="num">Jobs</th><th class="num">Jobs with wait data</th><th class="num">Average wait (hours)</th><th class="num">Median wait (hours)</th></tr></thead><tbody id="eff-waiting-body"></tbody></table></div>
+  <h3>User-level job efficiency</h3>
+  <div class="tablebox"><table><thead><tr><th>User</th><th class="num">Jobs</th><th class="num">CPU avg %</th><th class="num">CPU median %</th><th class="num">RAM avg %</th><th class="num">RAM median %</th><th class="num">GPU avg %</th><th class="num">GPU median %</th></tr></thead><tbody id="eff-users-body"></tbody></table></div>
+  <div id="eff-job-details" hidden><h3>Individual jobs for <span id="eff-selected-user"></span></h3><div class="tablebox"><table><thead><tr><th>Job ID</th><th>Account</th><th>State</th><th>Submitted</th><th>Started</th><th class="num">Waiting (hours)</th><th class="num">CPU efficiency %</th><th class="num">RAM efficiency %</th><th class="num">GPU utilization %</th></tr></thead><tbody id="eff-jobs-body"></tbody></table></div></div>
+</section>
 <section id="partitions" class="panel">
   <div class="hint">Aggregated CPU-hours and GPU-hours for terminal jobs started in the selected history range. Node/task counts are reported where Slurm accounting provides them.</div>
   <div class="hint">When sacct records a comma-separated list of eligible partitions, the job is shown under each named partition; CPU/GPU-hours are divided evenly among those alternatives so the chart does not double-count total resource-hours. Job counts are inclusion counts and can overlap across partitions.</div>
-  <div class="charts"><div class="chart pie-chart"><div id="partition-cpu-pie"></div></div><div class="chart pie-chart"><div id="partition-gpu-pie"></div></div></div><details id="partition-extra-pies" class="metric-details"><summary>Load additional partition charts (RAM, tasks, data I/O)</summary><div class="charts"><div class="chart pie-chart"><div id="partition-ram-pie"></div></div><div class="chart pie-chart"><div id="partition-tasks-pie"></div></div><div class="chart pie-chart"><div id="partition-read-pie"></div></div><div class="chart pie-chart"><div id="partition-write-pie"></div></div></div></details>
+  <div class="charts"><div class="chart pie-chart"><div id="partition-cpu-pie"></div></div><div class="chart pie-chart"><div id="partition-gpu-pie"></div></div></div><div class="chart waiting-chart"><div id="partition-wait-chart"></div></div><details id="partition-extra-pies" class="metric-details"><summary>Load additional partition charts (RAM, tasks, data I/O)</summary><div class="charts"><div class="chart pie-chart"><div id="partition-ram-pie"></div></div><div class="chart pie-chart"><div id="partition-tasks-pie"></div></div><div class="chart pie-chart"><div id="partition-read-pie"></div></div><div class="chart pie-chart"><div id="partition-write-pie"></div></div></div></details>
   <details id="partition-gpu-details" class="metric-details"><summary>Load GPU model usage charts and table</summary><h3>GPU model usage</h3><div class="hint">GPU models are identified from AllocTRES or inferred from the node inventory when only generic GPU counts are recorded. Historical jobs may use current node inventory as an approximation if node hardware changed.</div>
   <div class="charts"><div class="chart pie-chart"><div id="partition-gpu-type-jobs-pie"></div></div><div class="chart pie-chart"><div id="partition-gpu-type-count-pie"></div></div><div class="chart pie-chart"><div id="partition-gpu-type-hours-pie"></div></div></div>
   <div class="tablebox"><table><thead><tr><th>Partition</th><th>GPU type</th><th class="num">Jobs</th><th class="num">Total GPUs</th><th class="num">Average GPUs/job</th><th class="num">GPU-hours</th></tr></thead><tbody id="partition-gpu-types-body"></tbody></table></div></details>
@@ -98,9 +115,15 @@ let renderedUsersExtras=false;
 let renderedPartitionExtras=false;
 let renderedGpuDetails=false;
 let renderedAccountLevelPies=false;
+let overviewAdditionalMetricsKey="";
+let overviewAdditionalMetricsRequest=null;
+// Waiting summaries are identical across each chart on a page. Cache the API
+// response by range and filters so rendering department/PI/project charts does
+// not re-run the expensive per-job efficiency and job-step aggregation each time.
+const waitingSummaryCache = new Map();
 function tabCacheKey(tab){const range=document.getElementById("range").value;const start=document.getElementById("custom-start").value;const end=document.getElementById("custom-end").value;return [range,start,end,tab==="overview"?document.getElementById("interval").value:""].join("|")}
 function markTabLoaded(tab){loadedTabs[tab]=tabCacheKey(tab)}
-function invalidateTabCache(){gpuUsageCacheKey="";loadedTabs={};renderedOverviewExtras=false;renderedUsersExtras=false;renderedPartitionExtras=false;renderedGpuDetails=false;renderedAccountLevelPies=false}
+function invalidateTabCache(){gpuUsageCacheKey="";waitingSummaryCache.clear();loadedTabs={};renderedOverviewExtras=false;renderedUsersExtras=false;renderedPartitionExtras=false;renderedGpuDetails=false;renderedAccountLevelPies=false;overviewAdditionalMetricsKey="";overviewAdditionalMetricsRequest=null}
 function setClusterNavLocked(locked, label=ACTIVE_CLUSTER_NAME){
   clusterNavLocked=locked;
   document.querySelectorAll(".cluster-nav a").forEach(link=>{
@@ -189,19 +212,13 @@ function renderPie(id,rows,metric,label,title){
   // and MaxDiskRead/Write otherwise produce apparently empty pies.
   const positiveRows=(rows||[]).filter(r=>Number.isFinite(Number(r[metric]))&&Number(r[metric])>0);
   const total=positiveRows.reduce((sum,r)=>sum+Number(r[metric]),0);
-  if(container)container.style.display="";
   if(!(total>0)){
-    // Keep the chart card visible and explain the absence of positive values.
-    // Account hierarchy levels are filtered before this function is called,
-    // so genuinely empty account levels remain hidden without suppressing
-    // the task-count and disk-I/O chart slots on Users/Partitions.
-    if(window.Plotly)Plotly.react(id,[],{
-      title:{text:title},
-      annotations:[{text:"No positive data available for this metric in the selected range",xref:"paper",yref:"paper",x:.5,y:.5,showarrow:false}],
-      xaxis:{visible:false},yaxis:{visible:false},margin:{l:10,r:10,t:65,b:10}
-    },{responsive:true});
+    // Empty metrics should not leave a blank Plotly canvas or consume layout space.
+    if(container)container.style.display="none";
+    if(window.Plotly && typeof Plotly.purge==="function")Plotly.purge(id);
     return;
   }
+  if(container)container.style.display="";
   const sorted=[...positiveRows].sort((a,b)=>Number(b[metric])-Number(a[metric]));
   const totalText=metric==="jobs"?Math.round(total).toLocaleString():total.toLocaleString(undefined,{maximumFractionDigits:1});
   const units={jobs:"jobs",allocated_nodes:"node allocations",cpu_hours:"CPU-hours",gpu_hours:"GPU-hours",memory_gb_hours:"GiB-hours",total_tasks:"tasks",disk_read_gib:"GiB data read",disk_write_gib:"GiB data written",elapsed_hours:"hours"};
@@ -226,6 +243,47 @@ function renderPie(id,rows,metric,label,title){
   Plotly.react(id,[{labels:p.labels,values:p.values,type:"pie",textinfo:"label+percent",hovertemplate:`%{label}: %{value:.1f} ${unit} (%{percent})<extra></extra>`}],{title:{text:titleText},margin:{l:20,r:20,t:80,b:25},legend:{orientation:"h"}},{responsive:true});
 }
 function fmtMaybe(v,suffix=""){return v==null||!Number.isFinite(Number(v))?"N/A":fmt(Number(v))+suffix}
+async function loadOverviewAdditionalJobMetrics(force=false){
+  const details=document.getElementById("overview-additional-job-metrics");
+  if(!details||!details.open)return;
+  const key=tabCacheKey("overview");
+  if(!force&&overviewAdditionalMetricsKey===key)return;
+  if(overviewAdditionalMetricsRequest&&!force)return overviewAdditionalMetricsRequest;
+  const status=document.getElementById("overview-additional-job-metrics-status");
+  status.className="additional-metrics-status is-loading";
+  status.setAttribute("aria-live","assertive");
+  status.setAttribute("aria-busy","true");
+  status.innerHTML='<span class="spinner" aria-hidden="true"></span><span class="status-copy"><span>Loading additional job metrics…</span><span class="status-detail">Calculating metrics for the selected date range. This may take a little while for larger histories.</span></span>';
+  const {start,end}=getRange();
+  const requestKey=key;
+  overviewAdditionalMetricsRequest=(async()=>{
+    try{
+      const metrics=await getJSON(`/api/additional-job-metrics/?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
+      if(requestKey!==tabCacheKey("overview"))return;
+      for(const [id,keyName,suffix] of [
+        ["peak-cpus","max_cpus_per_job",""],["peak-gpus","max_gpus_per_job",""],
+        ["peak-ram","max_requested_memory_gib"," GiB"],["peak-recorded-ram","max_recorded_rss_gib"," GiB"],
+        ["peak-gpu-ram","max_recorded_gpu_memory_gib"," GiB"],["peak-runtime","max_elapsed_runtime_hours"," h"],
+        ["peak-limit","max_time_limit_hours"," h"],["peak-disk-read","max_disk_read_gib"," GiB"],
+        ["peak-disk-write","max_disk_write_gib"," GiB"],["peak-disk-io","max_disk_io_gib"," GiB"],
+        ["peak-nodes","max_nodes_per_job",""],["avg-nodes","avg_nodes_per_job",""],
+        ["peak-tasks","max_tasks_per_job",""],["avg-tasks","avg_tasks_per_job",""]
+      ])document.getElementById(id).textContent=fmtMaybe(metrics[keyName],suffix);
+      overviewAdditionalMetricsKey=requestKey;
+      status.className="additional-metrics-status is-loaded";
+      status.removeAttribute("aria-busy");
+      status.setAttribute("aria-live","polite");
+      status.textContent="✓ Additional job metrics loaded.";
+    }catch(error){
+      status.className="additional-metrics-status is-error";
+      status.removeAttribute("aria-busy");
+      status.setAttribute("aria-live","assertive");
+      status.textContent="Unable to load additional job metrics: "+error.message;
+    }
+    finally{overviewAdditionalMetricsRequest=null;}
+  })();
+  return overviewAdditionalMetricsRequest;
+}
 function secondsHours(v){return v==null?null:Number(v)/3600}
 function renderOverviewExtraCharts(){
   if(renderedOverviewExtras || !lastOverviewRows.length || !window.Plotly)return;
@@ -254,20 +312,6 @@ async function loadOverview(){
     for(const [id,key] of [["completed-count","completed_count"],["cancelled-count","cancelled_count"],["failed-count","failed_count"],["other-count","other_count"],["cpu-hours","cpu_hours"],["gpu-hours","gpu_hours"]])document.getElementById(id).textContent=fmt(summary[key]??0);
     document.getElementById("running-count").textContent=summary.running_count==null?"Unavailable":fmt(summary.running_count);
     document.getElementById("pending-count").textContent=summary.pending_count==null?"Unavailable":fmt(summary.pending_count);
-    document.getElementById("peak-cpus").textContent=fmtMaybe(summary.max_cpus_per_job);
-    document.getElementById("peak-gpus").textContent=fmtMaybe(summary.max_gpus_per_job);
-    document.getElementById("peak-ram").textContent=fmtMaybe(summary.max_requested_memory_gib," GiB");
-    document.getElementById("peak-recorded-ram").textContent=fmtMaybe(summary.max_recorded_rss_gib," GiB");
-    document.getElementById("peak-gpu-ram").textContent=fmtMaybe(summary.max_recorded_gpu_memory_gib," GiB");
-    document.getElementById("peak-runtime").textContent=fmtMaybe(summary.max_elapsed_runtime_hours," h");
-    document.getElementById("peak-limit").textContent=fmtMaybe(summary.max_time_limit_hours," h");
-    document.getElementById("peak-disk-read").textContent=fmtMaybe(summary.max_disk_read_gib," GiB");
-    document.getElementById("peak-disk-write").textContent=fmtMaybe(summary.max_disk_write_gib," GiB");
-    document.getElementById("peak-disk-io").textContent=fmtMaybe(summary.max_disk_io_gib," GiB");
-    document.getElementById("peak-nodes").textContent=fmtMaybe(summary.max_nodes_per_job);
-    document.getElementById("avg-nodes").textContent=fmtMaybe(summary.avg_nodes_per_job);
-    document.getElementById("peak-tasks").textContent=fmtMaybe(summary.max_tasks_per_job);
-    document.getElementById("avg-tasks").textContent=fmtMaybe(summary.avg_tasks_per_job);
     document.getElementById("refreshed").textContent=metadata.refreshed_at?`Snapshot: ${new Date(metadata.refreshed_at).toLocaleString()}`:"";
     const rows=series.results||[],x=rows.map(r=>r.timestamp);lastOverviewRows=rows;renderedOverviewExtras=false;
     Plotly.react("job-flow-chart",[
@@ -280,6 +324,7 @@ async function loadOverview(){
       {x,y:rows.map(r=>r.allocated_gpus),name:"Concurrent allocated GPUs",type:"scatter",mode:"lines",yaxis:"y2"}
     ],{...baseLayout("Concurrent resource allocation"),yaxis:{title:"CPUs"},yaxis2:{title:"GPUs",overlaying:"y",side:"right"}},{responsive:true});
     if(document.getElementById("overview-extra-charts").open)renderOverviewExtraCharts();
+    if(document.getElementById("overview-additional-job-metrics").open)loadOverviewAdditionalJobMetrics();
     document.getElementById("error").textContent="";markTabLoaded("overview");
   }catch(e){document.getElementById("error").textContent="Unable to load dashboard: "+e.message}finally{setLoading(false)}
 }
@@ -327,7 +372,7 @@ async function loadAccountsGpuModelPies(){
     holder.dataset.loadedFor=tabCacheKey("accounts");
   }catch(e){holder.innerHTML=`<p class=\"error\">Unable to load GPU model usage: ${safe(e.message)}</p>`}
 }
-async function loadUsers(){const gpuHolder=document.getElementById("users-gpu-model-pies");if(gpuHolder)delete gpuHolder.dataset.loadedFor;setLoading(true);try{const {start,end}=getRange(),u=document.getElementById("user-filter").value,a=document.getElementById("user-account-filter").value;lastUsers=await getJSON(`/api/users/usage/?user=${encodeURIComponent(u)}&account=${encodeURIComponent(a)}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&limit=10000&sort=${encodeURIComponent(userSort.sort)}&direction=${userSort.direction}`);await loadGpuTypeUsage(start,end);const gpuMap=gpuTypeHoursMap(lastGpuUsage.users,"user");setGpuTypeHeaders("users-body","sortUsers('gpu_hours')");document.getElementById("users-body").innerHTML=lastUsers.map(r=>`<tr><td>${safe(r.user)}</td><td class="num">${fmt(r.jobs)}</td><td class="num">${fmt(r.allocated_nodes)}</td><td class="num">${fmt(r.cpu_hours)}</td><td class="num">${fmt(r.gpu_hours)}</td>${gpuTypeCells(gpuMap,r.user)}<td class="num">${fmt(r.memory_gb_hours)}</td><td class="num">${fmt(r.gpu_memory_gb)}</td><td class="num">${fmt(r.total_tasks)}</td><td class="num">${fmt(r.disk_read_gib)}</td><td class="num">${fmt(r.disk_write_gib)}</td></tr>`).join("");renderPie("users-cpu-pie",lastUsers,"cpu_hours","user","Users: CPU-hour share");renderPie("users-gpu-pie",lastUsers,"gpu_hours","user","Users: GPU-hour share");renderedUsersExtras=false;if(document.getElementById("users-extra-pies").open)renderUsersExtraPies();updateSortIndicators("sort-",userSort);applyGpuHoursSort("users-body");updateGpuSortIndicators("users-body");markTabLoaded("users")}catch(e){document.getElementById("error").textContent="Unable to load users: "+e.message}finally{setLoading(false)}}
+async function loadUsers(){const gpuHolder=document.getElementById("users-gpu-model-pies");if(gpuHolder)delete gpuHolder.dataset.loadedFor;setLoading(true);try{const {start,end}=getRange(),u=document.getElementById("user-filter").value,a=document.getElementById("user-account-filter").value;lastUsers=await getJSON(`/api/users/usage/?user=${encodeURIComponent(u)}&account=${encodeURIComponent(a)}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&limit=10000&sort=${encodeURIComponent(userSort.sort)}&direction=${userSort.direction}`);await loadGpuTypeUsage(start,end);const gpuMap=gpuTypeHoursMap(lastGpuUsage.users,"user");setGpuTypeHeaders("users-body","sortUsers('gpu_hours')");document.getElementById("users-body").innerHTML=lastUsers.map(r=>`<tr><td>${safe(r.user)}</td><td class="num">${fmt(r.jobs)}</td><td class="num">${fmt(r.allocated_nodes)}</td><td class="num">${fmt(r.cpu_hours)}</td><td class="num">${fmt(r.gpu_hours)}</td>${gpuTypeCells(gpuMap,r.user)}<td class="num">${fmt(r.memory_gb_hours)}</td><td class="num">${fmt(r.gpu_memory_gb)}</td><td class="num">${fmt(r.total_tasks)}</td><td class="num">${fmt(r.disk_read_gib)}</td><td class="num">${fmt(r.disk_write_gib)}</td></tr>`).join("");renderPie("users-cpu-pie",lastUsers,"cpu_hours","user","Users: CPU-hour share");renderPie("users-gpu-pie",lastUsers,"gpu_hours","user","Users: GPU-hour share");await loadWaitingChart("users-wait-chart","User",u,a,"Users: average and median job waiting time");renderedUsersExtras=false;if(document.getElementById("users-extra-pies").open)renderUsersExtraPies();updateSortIndicators("sort-",userSort);applyGpuHoursSort("users-body");updateGpuSortIndicators("users-body");markTabLoaded("users")}catch(e){document.getElementById("error").textContent="Unable to load users: "+e.message}finally{setLoading(false)}}
 async function loadAccounts(){
   const gpuHolder=document.getElementById("accounts-gpu-model-pies");if(gpuHolder)delete gpuHolder.dataset.loadedFor;
   setLoading(true);
@@ -343,6 +388,9 @@ async function loadAccounts(){
     updateAccountPieFilters();
     renderedAccountLevelPies=false;
     renderAccountPies();
+    await loadWaitingChart("accounts-dept-wait-chart","Department","",filter,"Departments: average and median job waiting time");
+    await loadWaitingChart("accounts-pi-wait-chart","PI","",filter,"PIs: average and median job waiting time");
+    await loadWaitingChart("accounts-project-wait-chart","Project/PN","",filter,"Projects (PN): average and median job waiting time");
     applyGpuHoursSort("accounts-body");updateGpuSortIndicators("accounts-body");
     updateSortIndicators("asort-",accountSort);markTabLoaded("accounts");
   }catch(e){document.getElementById("error").textContent="Unable to load accounts: "+e.message}finally{setLoading(false)}
@@ -431,6 +479,7 @@ async function loadPartitions(){
     renderPartitionTable();
     renderPie("partition-cpu-pie",lastPartitions,"cpu_hours","partition","Partitions: CPU-hours share");
     renderPie("partition-gpu-pie",lastPartitions,"gpu_hours","partition","Partitions: GPU-hours share");
+    await loadWaitingChart("partition-wait-chart","Partition","","","Partitions: average and median job waiting time");
     renderedPartitionExtras=false;renderedGpuDetails=false;
     if(document.getElementById("partition-extra-pies").open)renderPartitionExtraPies();
     if(document.getElementById("partition-gpu-details").open)loadPartitionGpuDetails();
@@ -472,17 +521,75 @@ function toggleSort(state,key){if(state.sort===key)state.direction=state.directi
 function sortUsers(key){toggleSort(userSort,key);loadUsers()}
 function sortAccounts(key){toggleSort(accountSort,key);loadAccounts()}
 document.getElementById("range").addEventListener("change",()=>{invalidateTabCache();const custom=document.getElementById("range").value==="custom";document.getElementById("custom-range").classList.toggle("visible",custom);if(custom&&!document.getElementById("custom-start").value){const end=new Date();document.getElementById("custom-end").value=toISOInput(end);document.getElementById("custom-start").value=toISOInput(new Date(end.getTime()-7*864e5))}else loadActiveTab()});document.getElementById("apply-range").addEventListener("click",event=>{event.preventDefault();invalidateTabCache();loadActiveTab(true)});document.getElementById("interval").addEventListener("change",()=>{invalidateTabCache();loadOverview()});
+document.getElementById("eff-search").addEventListener("click",()=>{invalidateTabCache();loadEfficiency()});
 document.getElementById("account-pie-metric").addEventListener("change",renderAccountPies);
 document.getElementById("pi-dept-filter").addEventListener("change",()=>{updateAccountPieFilters();renderAccountPies()});
 document.getElementById("project-pi-filter").addEventListener("change",renderAccountPies);
 document.getElementById("overview-extra-charts").addEventListener("toggle",e=>{if(e.target.open)renderOverviewExtraCharts()});
+document.getElementById("overview-additional-job-metrics").addEventListener("toggle",e=>{if(e.target.open)loadOverviewAdditionalJobMetrics()});
 document.getElementById("users-extra-pies").addEventListener("toggle",e=>{if(e.target.open)renderUsersExtraPies()});
 document.getElementById("users-gpu-model-details").addEventListener("toggle",e=>{if(e.target.open)loadUsersGpuModelPies()});
 document.getElementById("accounts-gpu-model-details").addEventListener("toggle",e=>{if(e.target.open)loadAccountsGpuModelPies()});
 document.getElementById("accounts-level-details").addEventListener("toggle",e=>{if(e.target.open)renderAccountLevelPies(accountDepths(lastAccounts))});
 document.getElementById("partition-extra-pies").addEventListener("toggle",e=>{if(e.target.open)renderPartitionExtraPies()});
 document.getElementById("partition-gpu-details").addEventListener("toggle",e=>{if(e.target.open)loadPartitionGpuDetails()});
-function loadActiveTab(force=false){const active=document.querySelector(".tab.active").dataset.panel;if(!force&&loadedTabs[active]===tabCacheKey(active))return;if(active==="overview")loadOverview();else if(active==="users")loadUsers();else if(active==="accounts")loadAccounts();else if(active==="partitions")loadPartitions()}
+let lastEfficiency={users:[],departments:[],pis:[],jobs:[]};
+async function loadWaitingChart(targetId,groupType,userFilter="",accountFilter="",title="Average and median job waiting time"){
+  const target=document.getElementById(targetId);if(!target)return;
+  try{
+    const {start,end}=getRange();
+    const cacheKey=JSON.stringify([start,end,userFilter||"",accountFilter||""]);
+    let request=waitingSummaryCache.get(cacheKey);
+    if(!request){
+      const params=new URLSearchParams({start,end,user:userFilter||"",account:accountFilter||"",limit:"10000",waiting_only:"1"});
+      request=getJSON(`/api/resource-efficiency/?${params}`).catch(error=>{waitingSummaryCache.delete(cacheKey);throw error;});
+      waitingSummaryCache.set(cacheKey,request);
+      // Bound the cache so custom date-range exploration does not grow it forever.
+      if(waitingSummaryCache.size>8)waitingSummaryCache.delete(waitingSummaryCache.keys().next().value);
+    }
+    const data=await request;
+    const rows=(data.waiting_summaries||[]).filter(r=>r.group_type===groupType&&r.measured_jobs>0)
+      .sort((a,b)=>(Number(b.average_hours)||0)-(Number(a.average_hours)||0)).slice(0,12);
+    if(!rows.length){Plotly.react(targetId,[],{...baseLayout(title),height:350,annotations:[{text:"No waiting-time data in selected range",xref:"paper",yref:"paper",x:.5,y:.5,showarrow:false}],xaxis:{visible:false},yaxis:{visible:false},margin:{l:35,r:15,t:55,b:35}},{responsive:true,displaylogo:false});return;}
+    const layout={...baseLayout(title),barmode:"group",height:350,autosize:true,xaxis:{title:groupType,automargin:true,tickangle:-35},yaxis:{title:"Waiting time (hours)",rangemode:"tozero",automargin:true},margin:{l:60,r:20,t:55,b:105},legend:{orientation:"h",y:1.12,x:0}};
+    Plotly.react(targetId,[{type:"bar",name:"Average",x:rows.map(r=>r.group),y:rows.map(r=>r.average_hours),hovertemplate:"%{x}<br>Average: %{y:.2f} hours<extra></extra>"},{type:"bar",name:"Median",x:rows.map(r=>r.group),y:rows.map(r=>r.median_hours),hovertemplate:"%{x}<br>Median: %{y:.2f} hours<extra></extra>"}],layout,{responsive:true,displaylogo:false});
+  }catch(e){Plotly.react(targetId,[],{...baseLayout(title),annotations:[{text:`Unable to load waiting-time data: ${e.message}`,xref:"paper",yref:"paper",x:.5,y:.5,showarrow:false}],xaxis:{visible:false},yaxis:{visible:false}},{responsive:true,displaylogo:false});}
+}
+function efficiencyMetric(row,key,stat){const metric=row&&row[key];return metric&&metric[stat]!=null?Number(metric[stat]):null}
+function efficiencyFmt(value){return value==null?"N/A":`${Number(value).toFixed(2)}%`}
+function waitingFmt(value){return value==null?"N/A":`${Number(value).toFixed(2)}`}
+function renderEfficiencyChart(id,rows,nameKey,metric,title){
+  const labels=rows.map(r=>nameKey==="pi"?`${r.department} / ${r.pi}`:r[nameKey]);
+  const averages=rows.map(r=>efficiencyMetric(r,metric,"average"));
+  const medians=rows.map(r=>efficiencyMetric(r,metric,"median"));
+  const traces=[{type:"bar",name:"Average",x:labels,y:averages,customdata:rows.map(r=>r[metric]?.measured_jobs||0),hovertemplate:"%{x}<br>Average: %{y:.2f}%<br>Measured jobs: %{customdata}<extra></extra>"},{type:"bar",name:"Median",x:labels,y:medians,customdata:rows.map(r=>r[metric]?.measured_jobs||0),hovertemplate:"%{x}<br>Median: %{y:.2f}%<br>Measured jobs: %{customdata}<extra></extra>"}];
+  Plotly.react(id,traces,{...baseLayout(title),barmode:"group",height:480,yaxis:{title:"Efficiency / utilization (%)",rangemode:"tozero"},xaxis:{automargin:true,tickangle:-25},margin:{l:65,r:20,t:55,b:100}},{responsive:true,displaylogo:false});
+}
+async function showEfficiencyJobs(user){
+  const holder=document.getElementById("eff-job-details");
+  try{const {start,end}=getRange();const params=new URLSearchParams({start,end,user,include_jobs:"1",limit:"5000"});const data=await getJSON(`/api/resource-efficiency/?${params}`);document.getElementById("eff-selected-user").textContent=user;document.getElementById("eff-jobs-body").innerHTML=(data.jobs||[]).map(j=>`<tr><td>${safe(j.job_id)}</td><td>${safe(j.account)}</td><td>${safe(j.state)}</td><td>${safe(j.submit_time)}</td><td>${safe(j.start_time)}</td><td class="num">${waitingFmt(j.waiting_hours)}</td><td class="num">${efficiencyFmt(j.cpu_efficiency_pct)}</td><td class="num">${efficiencyFmt(j.ram_efficiency_pct)}</td><td class="num">${efficiencyFmt(j.gpu_utilization_pct)}</td></tr>`).join("");holder.hidden=false;holder.scrollIntoView({behavior:"smooth",block:"start"});}catch(e){document.getElementById("error").textContent="Unable to load user job efficiency: "+e.message}
+}
+async function loadEfficiency(){
+  setLoading(true);
+  try{
+    const {start,end}=getRange();const params=new URLSearchParams({start,end,user:document.getElementById("eff-user-filter").value,account:document.getElementById("eff-account-filter").value,limit:"10000"});
+    lastEfficiency=await getJSON(`/api/resource-efficiency/?${params}`);
+    const stateRows=(lastEfficiency.state_summaries||[]).slice().sort((a,b)=>Number(b.jobs)-Number(a.jobs));
+    Plotly.react("eff-state-chart",[{type:"bar",name:"Jobs",x:stateRows.map(r=>r.state),y:stateRows.map(r=>r.jobs),hovertemplate:"State: %{x}<br>Jobs: %{y:,}<extra></extra>"}],{...baseLayout(`Job states in selected range (${fmt(lastEfficiency.total_jobs_in_range||0)} jobs)`),height:350,xaxis:{title:"Slurm state",automargin:true,tickangle:-35},yaxis:{title:"Jobs",rangemode:"tozero",automargin:true},margin:{l:60,r:20,t:55,b:105},showlegend:false},{responsive:true,displaylogo:false});
+    const departments=lastEfficiency.departments||[],pis=lastEfficiency.pis||[],users=lastEfficiency.users||[];
+    renderEfficiencyChart("eff-dept-cpu",departments,"department","cpu_efficiency_pct","Departments: CPU efficiency");
+    renderEfficiencyChart("eff-dept-ram",departments,"department","ram_efficiency_pct","Departments: RAM efficiency");
+    renderEfficiencyChart("eff-dept-gpu",departments,"department","gpu_utilization_pct","Departments: GPU utilization");
+    renderEfficiencyChart("eff-pi-cpu",pis,"pi","cpu_efficiency_pct","PIs: CPU efficiency");
+    renderEfficiencyChart("eff-pi-ram",pis,"pi","ram_efficiency_pct","PIs: RAM efficiency");
+    renderEfficiencyChart("eff-pi-gpu",pis,"pi","gpu_utilization_pct","PIs: GPU utilization");
+    document.getElementById("eff-users-body").innerHTML=users.map(r=>`<tr style="cursor:pointer" title="Click to inspect jobs" data-eff-user="${safe(r.user)}" onclick="showEfficiencyJobs(this.dataset.effUser)"><td>${safe(r.user)}</td><td class="num">${fmt(r.jobs)}</td><td class="num">${efficiencyFmt(efficiencyMetric(r,"cpu_efficiency_pct","average"))}</td><td class="num">${efficiencyFmt(efficiencyMetric(r,"cpu_efficiency_pct","median"))}</td><td class="num">${efficiencyFmt(efficiencyMetric(r,"ram_efficiency_pct","average"))}</td><td class="num">${efficiencyFmt(efficiencyMetric(r,"ram_efficiency_pct","median"))}</td><td class="num">${efficiencyFmt(efficiencyMetric(r,"gpu_utilization_pct","average"))}</td><td class="num">${efficiencyFmt(efficiencyMetric(r,"gpu_utilization_pct","median"))}</td></tr>`).join("");
+    document.getElementById("eff-waiting-body").innerHTML=(lastEfficiency.waiting_summaries||[]).map(r=>`<tr><td>${safe(r.group_type)}</td><td>${safe(r.group)}</td><td class="num">${fmt(r.jobs)}</td><td class="num">${fmt(r.measured_jobs)}</td><td class="num">${waitingFmt(r.average_hours)}</td><td class="num">${waitingFmt(r.median_hours)}</td></tr>`).join("");
+    document.getElementById("eff-job-details").hidden=true;markTabLoaded("efficiency");
+  }catch(e){document.getElementById("error").textContent="Unable to load resource efficiency: "+e.message}
+  finally{setLoading(false)}
+}
+function loadActiveTab(force=false){const active=document.querySelector(".tab.active").dataset.panel;if(!force&&loadedTabs[active]===tabCacheKey(active))return;if(active==="overview")loadOverview();else if(active==="users")loadUsers();else if(active==="accounts")loadAccounts();else if(active==="efficiency")loadEfficiency();else if(active==="partitions")loadPartitions()}
 setClusterNavLocked(clusterNavLocked,ACTIVE_CLUSTER_NAME);
 bindClusterNavigation();
 document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));document.querySelectorAll(".panel").forEach(x=>x.classList.remove("active"));b.classList.add("active");document.getElementById(b.dataset.panel).classList.add("active");loadActiveTab()}));

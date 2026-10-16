@@ -23,15 +23,37 @@ _INTERVALS = {
     "6h": timedelta(hours=6),
     "12h": timedelta(hours=12),
     "1d": timedelta(days=1),
+    # Calendar-based buckets; these are floored/advanced by helper functions.
+    "1w": None,
+    "1mo": None,
 }
 
 
 def _bucket_floor(value, interval):
-    """Floor an aware datetime to a fixed UTC interval."""
+    """Floor an aware datetime to a fixed or calendar UTC interval."""
+    if interval == "1w":
+        day = value.astimezone(UTC).date()
+        monday = day - timedelta(days=day.weekday())
+        return datetime(monday.year, monday.month, monday.day, tzinfo=UTC)
+    if interval == "1mo":
+        value = value.astimezone(UTC)
+        return datetime(value.year, value.month, 1, tzinfo=UTC)
+    delta = _INTERVALS[interval]
     epoch = datetime(1970, 1, 1, tzinfo=UTC)
     seconds = int((value - epoch).total_seconds())
-    width = int(interval.total_seconds())
+    width = int(delta.total_seconds())
     return epoch + timedelta(seconds=(seconds // width) * width)
+
+
+def _bucket_next(value, interval):
+    """Return the next bucket boundary (calendar-aware for week/month)."""
+    if interval == "1w":
+        return value + timedelta(days=7)
+    if interval == "1mo":
+        if value.month == 12:
+            return datetime(value.year + 1, 1, 1, tzinfo=UTC)
+        return datetime(value.year, value.month + 1, 1, tzinfo=UTC)
+    return value + _INTERVALS[interval]
 
 
 def _parse_datetime(value):
@@ -139,9 +161,8 @@ def job_time_series(df, start=None, end=None, interval="1h"):
     if requested_end <= requested_start:
         raise ValueError("end must be later than start")
 
-    bucket_delta = _INTERVALS[interval]
-    first_bucket = _bucket_floor(requested_start, bucket_delta)
-    last_bucket = _bucket_floor(requested_end - timedelta(microseconds=1), bucket_delta)
+    first_bucket = _bucket_floor(requested_start, interval)
+    last_bucket = _bucket_floor(requested_end - timedelta(microseconds=1), interval)
 
     # Event deltas: resources/jobs become active at start and inactive at end.
     events = {}
@@ -177,7 +198,7 @@ def job_time_series(df, start=None, end=None, interval="1h"):
     for row in rows:
         submitted_at = _parse_datetime(row.get("submit_time"))
         if submitted_at is not None and requested_start <= submitted_at < requested_end:
-            submit_bucket = _bucket_floor(submitted_at, bucket_delta)
+            submit_bucket = _bucket_floor(submitted_at, interval)
             submissions[submit_bucket] = submissions.get(submit_bucket, 0) + 1
 
         job_start = _parse_datetime(row.get("start_time"))
@@ -193,8 +214,8 @@ def job_time_series(df, start=None, end=None, interval="1h"):
         if clipped_end <= clipped_start:
             continue
 
-        start_bucket = _bucket_floor(clipped_start, bucket_delta)
-        end_bucket = _bucket_floor(clipped_end, bucket_delta)
+        start_bucket = _bucket_floor(clipped_start, interval)
+        end_bucket = _bucket_floor(clipped_end, interval)
 
         cpu = _numeric(row.get("ncpus"))
         gpu = _numeric(row.get("gpu_count"))
@@ -288,7 +309,7 @@ def job_time_series(df, start=None, end=None, interval="1h"):
                 "avg_time_limit_seconds": _mean(runtime_samples.get(timestamp, {}).get("limit", [])),
             }
         )
-        timestamp += bucket_delta
+        timestamp = _bucket_next(timestamp, interval)
 
     # Do not rely on Polars' default schema inference here.  The first
     # 100 buckets can contain only nulls (or whole-number-looking values) for

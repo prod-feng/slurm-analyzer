@@ -54,3 +54,21 @@ def test_time_series_rejects_unknown_interval():
         assert "Unsupported interval" in str(exc)
     else:
         raise AssertionError("expected ValueError")
+
+
+def test_week_bucket_uses_monday_calendar_boundaries():
+    from slurm_analytics.timeseries import _bucket_floor, _bucket_next
+
+    value = datetime(2026, 10, 15, 12, tzinfo=UTC)  # Thursday
+    start = _bucket_floor(value, "1w")
+    assert start == datetime(2026, 10, 12, tzinfo=UTC)
+    assert _bucket_next(start, "1w") == datetime(2026, 10, 19, tzinfo=UTC)
+
+
+def test_month_bucket_uses_calendar_month_boundaries():
+    from slurm_analytics.timeseries import _bucket_floor, _bucket_next
+
+    value = datetime(2026, 12, 31, 23, tzinfo=UTC)
+    start = _bucket_floor(value, "1mo")
+    assert start == datetime(2026, 12, 1, tzinfo=UTC)
+    assert _bucket_next(start, "1mo") == datetime(2027, 1, 1, tzinfo=UTC)

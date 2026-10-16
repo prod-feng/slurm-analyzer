@@ -174,25 +174,23 @@ def normalize_gpu_fields(df):
             .alias("gpu_count")
         )
 
-    if "tresusageinave" in df.columns:
-
-        expressions.extend(
-            [
-                pl.col("tresusageinave")
-                .map_elements(
-                    parse_gpu_utilization,
-                    return_dtype=pl.Float64,
-                )
-                .alias("gpu_util"),
-
-                pl.col("tresusageinave")
-                .map_elements(
-                    parse_gpu_memory,
-                    return_dtype=pl.Int64,
-                )
-                .alias("gpu_mem_bytes"),
-            ]
-        )
+    # GresUsageInAve often uses short keys (gpuutil=..., gpumem=...),
+    # while TRESUsageInAve may use gres/gpuutil=... . Prefer GRES telemetry
+    # when present, then fall back to the TRES field.
+    usage_columns = [name for name in ("gresusageinave", "tresusageinave") if name in df.columns]
+    if usage_columns:
+        util_exprs = [
+            pl.col(name).map_elements(parse_gpu_utilization, return_dtype=pl.Float64)
+            for name in usage_columns
+        ]
+        mem_exprs = [
+            pl.col(name).map_elements(parse_gpu_memory, return_dtype=pl.Int64)
+            for name in usage_columns
+        ]
+        expressions.extend([
+            pl.coalesce(util_exprs).alias("gpu_util"),
+            pl.coalesce(mem_exprs).alias("gpu_mem_bytes"),
+        ])
 
     if expressions:
         df = df.with_columns(
@@ -434,6 +432,9 @@ def prepare_steps(steps):
         "alloctres",
         "nodelist",
         "jobname",
+        "gresusageinave",
+        "gresusageinmax",
+        "gresusageintot",
         "tresusageintot",
         "tresusageinave",
         "tresusageinmax",
