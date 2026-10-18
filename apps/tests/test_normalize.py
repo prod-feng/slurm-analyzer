@@ -347,3 +347,11 @@ def test_empty_sacct_result_has_normalized_step_schema():
     assert "is_application_step" in prepared.columns
     assert "is_workload_step" in prepared.columns
 
+
+
+def test_timeout_has_own_state_category():
+    from slurm_analytics.normalize import classify_state
+
+    assert classify_state("TIMEOUT") == "timeout"
+    assert classify_state("TIMEOUT+") == "timeout"
+    assert classify_state("FAILED") == "failed"

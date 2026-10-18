@@ -228,6 +228,12 @@ def classify_state(value):
     if state.startswith("COMPLETED"):
         return "completed"
 
+    # TIMEOUT is reported separately in event-count charts. It is often a
+    # useful/expected end condition for long-running scientific workloads and
+    # should not be conflated with failed jobs.
+    if state.startswith("TIMEOUT"):
+        return "timeout"
+
     if state.startswith("CANCELLED"):
         return "cancelled"
 

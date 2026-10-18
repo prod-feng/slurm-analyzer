@@ -4,8 +4,45 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{ active_cluster.name|escape }} · Slurm Analytics</title>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@11.1.2/dist/gridstack.min.css">
+<script src="https://cdn.jsdelivr.net/npm/gridstack@11.1.2/dist/gridstack-all.js"></script>
 <style>
-body{margin:0;padding:24px;font-family:Arial,sans-serif;background:#f5f7fa;color:#222}h1{margin-top:0}.cluster-nav{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 20px}.cluster-nav a{display:inline-block;padding:9px 14px;border-radius:6px;background:#e2e6eb;color:#222;text-decoration:none;font-weight:600}.cluster-nav a.active{background:#26384a;color:#fff}.tabs{display:flex;gap:4px;margin:18px 0}.tab{border:0;background:#ddd;padding:10px 18px;border-radius:6px;cursor:pointer}.tab.active{background:#333;color:#fff}.panel{display:none}.panel.active{display:block}.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:24px}.card,.chart,.tablebox{background:#fff;border-radius:8px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.12)}.card-title{color:#666;font-size:14px}.card-value{font-size:30px;font-weight:bold;margin-top:8px}.toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;background:#fff;padding:12px 16px;border-radius:8px;margin-bottom:20px}.toolbar label{font-weight:600}.toolbar input,.toolbar select,.toolbar button{padding:6px 8px}.muted{color:#666;font-size:13px;margin-left:auto}.hint{color:#666;font-size:13px;width:100%}.charts{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:stretch}.efficiency-charts{display:grid;grid-template-columns:minmax(0,1fr);gap:20px}.waiting-chart{grid-column:1/-1}.waiting-chart{min-height:380px;height:380px;padding-bottom:10px}.waiting-chart>div{height:350px;min-height:350px;max-height:350px;overflow:hidden}.efficiency-charts .chart{min-height:520px}.efficiency-charts .chart>div{height:480px}.wide{grid-column:1/-1}.chart{min-height:390px;min-width:0;box-sizing:border-box;position:relative}.chart>div{height:350px;min-width:0;width:100%}.chart.wide>div{height:390px}#resource-chart{height:390px!important;min-height:390px;max-height:390px;overflow:hidden}.pie-chart{min-height:430px}.pie-chart>div{height:390px}.error{color:#b00020;padding:12px}.tablebox{overflow:auto}table{border-collapse:collapse;width:100%;font-size:14px}th,td{text-align:left;padding:8px;border-bottom:1px solid #eee;white-space:nowrap}th{position:sticky;top:0;background:#fafafa}th button{border:0;background:transparent;font:inherit;font-weight:700;cursor:pointer;padding:0}.num{text-align:right}.sort-indicator{color:#666;font-size:11px}.indent{padding-left:calc(8px + var(--level)*20px)}.account-main-pies{display:grid;grid-template-columns:minmax(0,1fr);gap:20px}.account-level-group{grid-column:1/-1}.account-level-title{margin:8px 0 0}.account-level-charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.custom-range{display:none}.custom-range.visible{display:inline-flex;gap:8px;align-items:center}.metric-details{background:#fff;border-radius:8px;padding:14px 18px;margin:14px 0;box-shadow:0 1px 4px rgba(0,0,0,.08)}.metric-details>summary{cursor:pointer;font-weight:600}.metric-details .charts{margin-top:16px;clear:both;position:relative}.metric-details>summary{position:relative;z-index:1}.account-gpu-model-pies{display:block!important;width:100%}.account-gpu-model-pies>.account-level-title{margin:18px 0 8px}.account-gpu-model-pies>.account-level-charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;gap:20px;margin:0 0 18px;justify-items:stretch;align-items:stretch}.account-gpu-model-pies .chart{min-width:0;width:auto;box-sizing:border-box}.account-gpu-model-pies .chart>div{width:100%;min-width:0}.metric-details .cards{margin-top:14px}.additional-metrics-status{display:flex;align-items:center;gap:12px;width:100%;box-sizing:border-box;margin:14px 0;padding:14px 16px;border-radius:8px;font-size:15px;font-weight:600;line-height:1.45}.additional-metrics-status.is-loading{color:#063b76;background:#e6f3ff;border:2px solid #1683e8;box-shadow:0 0 0 3px rgba(22,131,232,.12)}.additional-metrics-status.is-loaded{color:#17633a;background:#e8f8ee;border:1px solid #76c893}.additional-metrics-status.is-error{color:#8c1522;background:#fff0f1;border:1px solid #df6c77}.additional-metrics-status .status-copy{display:flex;flex-direction:column;gap:3px}.additional-metrics-status .status-detail{font-size:13px;font-weight:400;color:inherit;opacity:.9}.spinner{width:24px;height:24px;flex:0 0 24px;box-sizing:border-box;border:4px solid #b8dcff;border-top-color:#0875df;border-right-color:#0875df;border-radius:50%;display:inline-block;animation:spin .75s linear infinite;filter:drop-shadow(0 0 2px rgba(8,117,223,.25))}@keyframes spin{to{transform:rotate(360deg)}}.loading-indicator{display:none;align-items:center;gap:8px;color:#555;font-size:13px}.loading-indicator.visible{display:inline-flex}.cluster-nav a.cluster-nav-disabled{pointer-events:none;cursor:wait;opacity:.55}.cluster-nav a.cluster-nav-disabled.active{opacity:.75}button:disabled{opacity:.6;cursor:wait}@media(max-width:1100px){.cards{grid-template-columns:repeat(2,1fr)}.charts,.account-level-charts{grid-template-columns:1fr}.wide,.account-level-group{grid-column:auto}}@media(max-width:700px){body{padding:12px}.cards{grid-template-columns:1fr}.custom-range.visible{width:100%;flex-wrap:wrap}}
+body{margin:0;padding:24px;font-family:Arial,sans-serif;background:#f5f7fa;color:#222}h1{margin-top:0}.cluster-nav{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 20px}.cluster-nav a{display:inline-block;padding:9px 14px;border-radius:6px;background:#e2e6eb;color:#222;text-decoration:none;font-weight:600}.cluster-nav a.active{background:#26384a;color:#fff}.tabs{display:flex;gap:4px;margin:18px 0}.tab{border:0;background:#ddd;padding:10px 18px;border-radius:6px;cursor:pointer}.tab.active{background:#333;color:#fff}.panel{display:none}.panel.active{display:block}.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:24px}.card,.chart,.tablebox{background:#fff;border-radius:8px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.12)}.card-title{color:#666;font-size:14px}.card-value{font-size:30px;font-weight:bold;margin-top:8px}.toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;background:#fff;padding:12px 16px;border-radius:8px;margin-bottom:20px}.toolbar label{font-weight:600}.toolbar input,.toolbar select,.toolbar button{padding:6px 8px}.muted{color:#666;font-size:13px;margin-left:auto}.hint{color:#666;font-size:13px;width:100%}.charts{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:stretch}.efficiency-charts{display:grid;grid-template-columns:minmax(0,1fr);gap:20px}.waiting-chart{grid-column:1/-1}.waiting-chart{min-height:380px;height:380px;padding-bottom:10px}.waiting-chart>div{height:350px;min-height:350px;max-height:350px;overflow:hidden}.overview-waiting-chart{height:auto;min-height:0;padding-bottom:18px;overflow:visible}.overview-waiting-chart>div:first-child{height:540px;min-height:540px;max-height:none;overflow:visible}.overview-waiting-chart .wait-chart-note{margin:12px 4px 0;line-height:1.5;color:#555;font-size:12px;width:auto}.efficiency-charts .chart{min-height:520px}.efficiency-charts .chart>div{height:480px}.wide{grid-column:1/-1}.chart{min-height:390px;min-width:0;box-sizing:border-box;position:relative}.chart>div{height:350px;min-width:0;width:100%}.chart.wide>div{height:390px}#resource-chart{height:390px!important;min-height:390px;max-height:390px;overflow:hidden}.pie-chart{min-height:430px}.pie-chart>div{height:390px}.error{color:#b00020;padding:12px}.tablebox{overflow:auto}table{border-collapse:collapse;width:100%;font-size:14px}th,td{text-align:left;padding:8px;border-bottom:1px solid #eee;white-space:nowrap}th{position:sticky;top:0;background:#fafafa}th button{border:0;background:transparent;font:inherit;font-weight:700;cursor:pointer;padding:0}.num{text-align:right}.sort-indicator{color:#666;font-size:11px}.indent{padding-left:calc(8px + var(--level)*20px)}.account-main-pies{display:grid;grid-template-columns:minmax(0,1fr);gap:20px}.account-level-group{grid-column:1/-1}.account-level-title{margin:8px 0 0}.account-level-charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.custom-range{display:none}.custom-range.visible{display:inline-flex;gap:8px;align-items:center}.metric-details{background:#fff;border-radius:8px;padding:14px 18px;margin:14px 0;box-shadow:0 1px 4px rgba(0,0,0,.08)}.metric-details>summary{cursor:pointer;font-weight:600}.metric-details .charts{margin-top:16px;clear:both;position:relative}.metric-details>summary{position:relative;z-index:1}.account-gpu-model-pies{display:block!important;width:100%}.account-gpu-model-pies>.account-level-title{margin:18px 0 8px}.account-gpu-model-pies>.account-level-charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;gap:20px;margin:0 0 18px;justify-items:stretch;align-items:stretch}.account-gpu-model-pies .chart{min-width:0;width:auto;box-sizing:border-box}.account-gpu-model-pies .chart>div{width:100%;min-width:0}.metric-details .cards{margin-top:14px}.additional-metrics-status{display:flex;align-items:center;gap:12px;width:100%;box-sizing:border-box;margin:14px 0;padding:14px 16px;border-radius:8px;font-size:15px;font-weight:600;line-height:1.45}.additional-metrics-status.is-loading{color:#063b76;background:#e6f3ff;border:2px solid #1683e8;box-shadow:0 0 0 3px rgba(22,131,232,.12)}.additional-metrics-status.is-loaded{color:#17633a;background:#e8f8ee;border:1px solid #76c893}.additional-metrics-status.is-error{color:#8c1522;background:#fff0f1;border:1px solid #df6c77}.additional-metrics-status .status-copy{display:flex;flex-direction:column;gap:3px}.additional-metrics-status .status-detail{font-size:13px;font-weight:400;color:inherit;opacity:.9}.spinner{width:24px;height:24px;flex:0 0 24px;box-sizing:border-box;border:4px solid #b8dcff;border-top-color:#0875df;border-right-color:#0875df;border-radius:50%;display:inline-block;animation:spin .75s linear infinite;filter:drop-shadow(0 0 2px rgba(8,117,223,.25))}@keyframes spin{to{transform:rotate(360deg)}}.loading-indicator{display:none;align-items:center;gap:8px;color:#555;font-size:13px}.loading-indicator.visible{display:inline-flex}.cluster-nav a.cluster-nav-disabled{pointer-events:none;cursor:wait;opacity:.55}.cluster-nav a.cluster-nav-disabled.active{opacity:.75}button:disabled{opacity:.6;cursor:wait}@media(max-width:1100px){.cards{grid-template-columns:repeat(2,1fr)}.charts,.account-level-charts{grid-template-columns:1fr}.wide,.account-level-group{grid-column:auto}}@media(max-width:700px){body{padding:12px}.cards{grid-template-columns:1fr}.custom-range.visible{width:100%;flex-wrap:wrap}}
+
+
+/* Customizable chart layout */
+.dashboard-layout-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 18px;padding:12px 14px;background:#fff;border:1px solid #d9e0e8;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.dashboard-layout-toolbar button,.dashboard-layout-toolbar summary{padding:7px 10px;border:1px solid #c8d1dc;border-radius:5px;background:#f7f9fb;color:#233447;font-weight:600;cursor:pointer}
+.dashboard-layout-toolbar button:disabled{opacity:.45;cursor:not-allowed}
+.dashboard-layout-toolbar #edit-dashboard-toggle[aria-pressed="true"]{background:#164e86;border-color:#164e86;color:#fff}
+#dashboard-layout-status{font-size:13px;color:#596777;margin-left:auto}
+#dashboard-widget-manager{position:relative}
+#dashboard-widget-manager summary{list-style:none}
+#dashboard-widget-manager summary::-webkit-details-marker{display:none}
+.dashboard-widget-list{position:absolute;z-index:1000;top:calc(100% + 6px);left:0;width:min(360px,85vw);max-height:55vh;overflow:auto;background:#fff;border:1px solid #ccd5df;border-radius:8px;padding:12px;box-shadow:0 8px 24px rgba(20,35,50,.18)}
+.dashboard-widget-list label{display:flex;gap:8px;align-items:flex-start;padding:7px 3px;border-bottom:1px solid #edf0f3;font-weight:400;cursor:pointer}
+.dashboard-widget-list label:last-child{border-bottom:0}
+.dashboard-widget-list input{margin-top:3px}
+.dashboard-add-widget-list{display:flex;flex-direction:column;gap:8px}
+.dashboard-add-widget-list select{max-width:100%;padding:7px;border:1px solid #c8d1dc;border-radius:5px}
+.widget-manager-hint{margin:0;color:#667384;font-size:13px;line-height:1.4}
+.grid-stack{min-width:0}
+.grid-stack-item-content{display:flex;flex-direction:column;gap:4px;overflow:visible!important;background:transparent!important}
+.grid-stack-item-content>.chart{flex:1 1 auto;min-height:0!important;height:100%!important;overflow:hidden}
+.grid-stack-item-content>.chart>div{height:calc(100% - 2px)!important;min-height:0!important;max-height:none!important;width:100%;box-sizing:border-box}
+.grid-stack-item-content>.chart.wide>div{height:calc(100% - 2px)!important}
+.grid-stack-item-content>.chart .js-plotly-plot,.grid-stack-item-content>.chart .plot-container{height:100%!important}
+.widget-controls{display:none;align-items:center;gap:8px;flex:0 0 28px;min-height:28px;padding:0 4px;color:#35465a;font-size:12px}
+.widget-drag-handle{cursor:move;user-select:none;font-weight:700;color:#164e86;white-space:nowrap}
+.widget-controls label{display:inline-flex;align-items:center;gap:4px}
+.widget-controls select{max-width:110px;padding:3px 5px;border:1px solid #bfcbd8;border-radius:4px;background:#fff;font-size:12px}
+.widget-hide-button{border:1px solid #c8d1dc;border-radius:4px;background:#fff;padding:3px 6px;cursor:pointer;font-size:12px}
+.dashboard-layout-editing .widget-controls{display:flex}
+.dashboard-layout-editing .grid-stack-item-content{border:1px dashed #9ab5d2;border-radius:8px;padding:3px;background:#f5f9ff!important}
+.dashboard-layout-editing .grid-stack-item-content>.chart{box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.dashboard-layout-editing .grid-stack-item.ui-draggable-dragging .grid-stack-item-content{box-shadow:0 8px 24px rgba(20,50,80,.22)}
+.grid-stack-item.layout-widget-hidden{display:none!important}
+@media(max-width:700px){.dashboard-layout-toolbar{align-items:stretch}.dashboard-layout-toolbar button{flex:1 1 auto}#dashboard-layout-status{width:100%;margin-left:0}.widget-controls{flex-wrap:wrap;height:auto}.grid-stack-item-content{gap:2px}}
 </style>
 </head>
 <body>
@@ -16,10 +53,32 @@ body{margin:0;padding:24px;font-family:Arial,sans-serif;background:#f5f7fa;color
 <div class="hint">Data source: {{ active_cluster.mode|escape }} · Each cluster has its own historical database.</div>
 <div id="error" class="error"></div>
 <div class="toolbar">
-  <label>History <select id="range"><option value="24h">24 hours</option><option value="7d" selected>7 days</option><option value="30d">30 days</option><option value="90d">90 days</option><option value="180d">180 days</option><option value="1y">1 year</option><option value="custom">Custom range</option></select></label>
+  <label>History <select id="range"><option value="24h">24 hours</option><option value="7d">7 days</option><option value="30d" selected>30 days</option><option value="90d">90 days</option><option value="180d">180 days</option><option value="1y">1 year</option><option value="custom">Custom range</option></select></label>
   <span id="custom-range" class="custom-range"><label>Start <input id="custom-start" type="datetime-local"></label><label>End <input id="custom-end" type="datetime-local"></label><button id="apply-range">Apply</button></span>
   <label>Bucket <select id="interval"><option value="15m">15 min</option><option value="1h">1 hour</option><option value="6h">6 hours</option><option value="1d" selected>1 day</option><option value="1w">1 week</option><option value="1mo">1 month</option></select></label>
   <span id="loading-indicator" class="loading-indicator" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span><span>Reloading data…</span></span><span id="refreshed" class="muted"></span>
+</div>
+<div class="dashboard-layout-toolbar" id="dashboard-layout-toolbar" aria-label="Dashboard layout controls">
+  <button type="button" id="edit-dashboard-toggle" aria-pressed="false">Edit Dashboard</button>
+  <button type="button" id="save-dashboard-layout" disabled>Save Layout</button>
+  <button type="button" id="discard-dashboard-layout" disabled>Discard Changes</button>
+  <button type="button" id="reset-dashboard-layout">Reset Cluster Layout</button>
+  <details id="dashboard-add-widget">
+    <summary>Add Widget</summary>
+    <div class="dashboard-widget-list dashboard-add-widget-list">
+      <label for="dashboard-add-widget-source">Duplicate a loaded chart</label>
+      <select id="dashboard-add-widget-source" aria-label="Chart to duplicate"></select>
+      <button type="button" id="dashboard-add-widget-confirm">Add Widget</button>
+      <p class="widget-manager-hint">Charts are copied from the currently loaded dashboard data and added to the same chart group as the source.</p>
+    </div>
+  </details>
+  <details id="dashboard-widget-manager">
+    <summary>Manage Widgets</summary>
+    <div id="dashboard-widget-list" class="dashboard-widget-list">
+      <p class="widget-manager-hint">Open a dashboard tab to load its charts, then use this list to show or hide chart widgets.</p>
+    </div>
+  </details>
+  <span id="dashboard-layout-status" role="status" aria-live="polite">Layout is read-only.</span>
 </div>
 <div class="tabs">
 <button class="tab active" data-panel="overview">Overview</button>
@@ -29,10 +88,10 @@ body{margin:0;padding:24px;font-family:Arial,sans-serif;background:#f5f7fa;color
 <button class="tab" data-panel="partitions">Partitions</button>
 </div>
 <section id="overview" class="panel active">
-<div class="cards"><div class="card"><div class="card-title">Completed (ended in range)</div><div id="completed-count" class="card-value">-</div></div><div class="card"><div class="card-title">Cancelled (ended in range)</div><div id="cancelled-count" class="card-value">-</div></div><div class="card"><div class="card-title">Failed (ended in range)</div><div id="failed-count" class="card-value">-</div></div><div class="card"><div class="card-title">Other terminal jobs (ended in range)</div><div id="other-count" class="card-value">-</div></div><div class="card"><div class="card-title">Running now (live queue)</div><div id="running-count" class="card-value">-</div></div><div class="card"><div class="card-title">Pending now (live queue)</div><div id="pending-count" class="card-value">-</div></div><div class="card"><div class="card-title">CPU hours (jobs started in range)</div><div id="cpu-hours" class="card-value">-</div></div><div class="card"><div class="card-title">GPU hours (jobs started in range)</div><div id="gpu-hours" class="card-value">-</div></div></div><details id="overview-additional-job-metrics" class="metric-details"><summary>Show additional job metrics (load on demand)</summary><div id="overview-additional-job-metrics-status" class="hint" role="status">Open this section to calculate detailed per-job metrics, including metrics that read job_steps.</div><div class="cards">
+<div class="cards"><div class="card"><div class="card-title">Completed (ended in range)</div><div id="completed-count" class="card-value">-</div></div><div class="card"><div class="card-title">Cancelled (ended in range)</div><div id="cancelled-count" class="card-value">-</div></div><div class="card"><div class="card-title">Failed (ended in range)</div><div id="failed-count" class="card-value">-</div></div><div class="card"><div class="card-title">Timeout (ended in range)</div><div id="timeout-count" class="card-value">-</div></div><div class="card"><div class="card-title">Other terminal jobs (ended in range)</div><div id="other-count" class="card-value">-</div></div><div class="card"><div class="card-title">Running now (live queue)</div><div id="running-count" class="card-value">-</div></div><div class="card"><div class="card-title">Pending now (live queue)</div><div id="pending-count" class="card-value">-</div></div><div class="card"><div class="card-title">CPU hours (jobs started in range)</div><div id="cpu-hours" class="card-value">-</div></div><div class="card"><div class="card-title">GPU hours (jobs started in range)</div><div id="gpu-hours" class="card-value">-</div></div></div><details id="overview-additional-job-metrics" class="metric-details"><summary>Show additional job metrics (load on demand)</summary><div id="overview-additional-job-metrics-status" class="hint" role="status">Open this section to calculate detailed per-job metrics, including metrics that read job_steps.</div><div class="cards">
 <div class="card"><div class="card-title">Maximum CPUs per job (terminal jobs)</div><div id="peak-cpus" class="card-value">-</div></div><div class="card"><div class="card-title">Maximum GPUs per job (terminal jobs)</div><div id="peak-gpus" class="card-value">-</div></div><div class="card"><div class="card-title">Maximum requested RAM per job (estimated total)</div><div id="peak-ram" class="card-value">-</div></div><div class="card"><div class="card-title">Maximum recorded RAM (MaxRSS)</div><div id="peak-recorded-ram" class="card-value">-</div></div><div class="card"><div class="card-title">Maximum recorded GPU memory</div><div id="peak-gpu-ram" class="card-value">-</div></div><div class="card"><div class="card-title">Longest runtime (hours)</div><div id="peak-runtime" class="card-value">-</div></div><div class="card"><div class="card-title">Largest time limit (hours)</div><div id="peak-limit" class="card-value">-</div></div><div class="card"><div class="card-title">Maximum data read (MaxDiskRead)</div><div id="peak-disk-read" class="card-value">N/A</div></div><div class="card"><div class="card-title">Maximum data write (MaxDiskWrite)</div><div id="peak-disk-write" class="card-value">N/A</div></div><div class="card"><div class="card-title">Maximum combined disk I/O</div><div id="peak-disk-io" class="card-value">N/A</div></div>
 <div class="card"><div class="card-title">Maximum nodes per job</div><div id="peak-nodes" class="card-value">N/A</div></div><div class="card"><div class="card-title">Average nodes per job</div><div id="avg-nodes" class="card-value">N/A</div></div><div class="card"><div class="card-title">Maximum tasks per job</div><div id="peak-tasks" class="card-value">N/A</div></div><div class="card"><div class="card-title">Average tasks per job</div><div id="avg-tasks" class="card-value">N/A</div></div></div></details>
-<div class="charts"><div class="chart"><div id="job-flow-chart"></div></div><div class="chart wide"><div id="resource-chart"></div></div></div><details id="overview-extra-charts" class="metric-details"><summary>Load additional charts (CPU, GPU, RAM, runtime)</summary><div class="charts"><div class="chart"><div id="cpu-chart"></div></div><div class="chart"><div id="gpu-chart"></div></div><div class="chart"><div id="memory-chart"></div></div><div class="chart"><div id="runtime-chart"></div></div></div></details>
+<div class="charts"><div class="chart wide"><div id="job-flow-chart"></div></div><div class="chart wide"><div id="resource-chart"></div></div><div class="chart waiting-chart overview-waiting-chart"><div id="overview-wait-chart"></div><p id="overview-wait-chart-note" class="hint wait-chart-note"></p></div></div><details id="overview-extra-charts" class="metric-details"><summary>Load additional charts (CPU, GPU, RAM, runtime)</summary><div class="charts"><div class="chart"><div id="cpu-chart"></div></div><div class="chart"><div id="gpu-chart"></div></div><div class="chart"><div id="memory-chart"></div></div><div class="chart"><div id="runtime-chart"></div></div></div></details>
 <div class="hint">Resource-per-job and RAM/runtime comparisons are bucketed by job start (RAM is requested memory vs recorded MaxRSS where accounting telemetry exists). Runtime is actual elapsed runtime vs Slurm time limit for terminal jobs ending in each bucket. CPU/GPU charts show average allocation per job, not utilization. Disk I/O is shown as unavailable when the accounting data does not provide a reliable value.</div>
 </section>
 <section id="users" class="panel">
@@ -309,7 +368,7 @@ async function loadOverview(){
       getJSON("/api/metadata/"),
       getJSON(`/api/timeseries/?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&interval=${encodeURIComponent(interval)}`)
     ]);
-    for(const [id,key] of [["completed-count","completed_count"],["cancelled-count","cancelled_count"],["failed-count","failed_count"],["other-count","other_count"],["cpu-hours","cpu_hours"],["gpu-hours","gpu_hours"]])document.getElementById(id).textContent=fmt(summary[key]??0);
+    for(const [id,key] of [["completed-count","completed_count"],["cancelled-count","cancelled_count"],["failed-count","failed_count"],["timeout-count","timeout_count"],["other-count","other_count"],["cpu-hours","cpu_hours"],["gpu-hours","gpu_hours"]])document.getElementById(id).textContent=fmt(summary[key]??0);
     document.getElementById("running-count").textContent=summary.running_count==null?"Unavailable":fmt(summary.running_count);
     document.getElementById("pending-count").textContent=summary.pending_count==null?"Unavailable":fmt(summary.pending_count);
     document.getElementById("refreshed").textContent=metadata.refreshed_at?`Snapshot: ${new Date(metadata.refreshed_at).toLocaleString()}`:"";
@@ -317,8 +376,21 @@ async function loadOverview(){
     Plotly.react("job-flow-chart",[
       {x,y:rows.map(r=>r.jobs_submitted),name:"Submitted",type:"bar"},
       {x,y:rows.map(r=>r.jobs_completed),name:"Completed",type:"bar"},
-      {x,y:rows.map(r=>r.jobs_failed),name:"Failed / timed out",type:"bar"}
+      {x,y:rows.map(r=>r.jobs_failed),name:"Failed",type:"bar"},
+      {x,y:rows.map(r=>r.jobs_timeout),name:"Timeout",type:"bar"},
+      {x,y:rows.map(r=>r.jobs_cancelled),name:"Cancelled",type:"bar"},
+      {x,y:rows.map(r=>r.jobs_other_terminal),name:"Other terminal states",type:"bar"}
     ],{...baseLayout("Job counts by event time"),barmode:"group",yaxis:{title:"Jobs",rangemode:"tozero"}},{responsive:true});
+    const waitSeries=series.waiting_series||[];
+    const waitX=waitSeries.map(r=>r.timestamp);
+    const waitMean=waitSeries.map(r=>r.mean_seconds==null||Number(r.mean_seconds)<=0?null:Number(r.mean_seconds)/3600);
+    const waitMax=waitSeries.map(r=>r.max_seconds==null||Number(r.max_seconds)<=0?null:Number(r.max_seconds)/3600);
+    const waitCount=waitSeries.reduce((sum,r)=>sum+Number(r.count||0),0);
+    Plotly.react("overview-wait-chart",[
+      {x:waitX,y:waitMean,type:"bar",name:"Mean / average wait",hovertemplate:"%{x}<br>Mean wait: %{y:.2f} h<extra></extra>"},
+      {x:waitX,y:waitMax,type:"bar",name:"Maximum wait",hovertemplate:"%{x}<br>Maximum wait: %{y:.2f} h<extra></extra>"}
+    ],{...baseLayout("Job wait time over time (grouped by submission date)"),height:540,barmode:"group",xaxis:{title:"Submission time",type:"date",automargin:true},yaxis:{title:"Wait time (hours, logarithmic scale)",type:"log",automargin:true,dtick:1},legend:{orientation:"h",y:1.08,x:0},margin:{l:70,r:20,t:90,b:90}},{responsive:true});
+    document.getElementById("overview-wait-chart-note").textContent=`Based on ${fmt(waitCount)} started jobs with valid wait times. Bucket size follows the Overview Bucket selector. Zero-hour values are omitted because a logarithmic axis only supports positive values.`;
     Plotly.react("resource-chart",[
       {x,y:rows.map(r=>r.allocated_cpus),name:"Concurrent allocated CPUs",type:"scatter",mode:"lines"},
       {x,y:rows.map(r=>r.allocated_gpus),name:"Concurrent allocated GPUs",type:"scatter",mode:"lines",yaxis:"y2"}
@@ -593,6 +665,507 @@ function loadActiveTab(force=false){const active=document.querySelector(".tab.ac
 setClusterNavLocked(clusterNavLocked,ACTIVE_CLUSTER_NAME);
 bindClusterNavigation();
 document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));document.querySelectorAll(".panel").forEach(x=>x.classList.remove("active"));b.classList.add("active");document.getElementById(b.dataset.panel).classList.add("active");loadActiveTab()}));
+/* Browser-session dashboard layout customization.
+   Analytics endpoints and data transformations remain unchanged. */
+const DASHBOARD_LAYOUT_KEY = `slurmAnalyticsLayout:v1:${ACTIVE_CLUSTER_SLUG}`;
+const DASHBOARD_GRID_SELECTOR = ".panel .charts, .panel .efficiency-charts, .panel .account-level-charts, .panel .account-main-pies";
+const dashboardGrids = new Map();
+let dashboardLayoutEditing = false;
+let dashboardLayoutDirty = false;
+let dashboardLayoutState = {version:1, grids:{}, widgets:{}};
+const originalPlotlyReact = Plotly.react.bind(Plotly);
+const dashboardOriginalPlotData = new Map();
+const dashboardOriginalPlotLayouts = new Map();
+const dashboardChartTypeOverrides = {};
+
+function dashboardStatus(message){
+  const el=document.getElementById("dashboard-layout-status");
+  if(el)el.textContent=message;
+}
+function dashboardReadLayout(){
+  try{
+    const raw=sessionStorage.getItem(DASHBOARD_LAYOUT_KEY);
+    if(!raw)return {version:1,grids:{},widgets:{},duplicates:{}};
+    const value=JSON.parse(raw);
+    if(!value||value.version!==1||typeof value.grids!=="object"||typeof value.widgets!=="object")return {version:1,grids:{},widgets:{},duplicates:{}};
+    if(!value.duplicates||typeof value.duplicates!=="object")value.duplicates={};
+    return value;
+  }catch(e){return {version:1,grids:{},widgets:{},duplicates:{}}}
+}
+function dashboardWriteLayout(){
+  try{sessionStorage.setItem(DASHBOARD_LAYOUT_KEY,JSON.stringify(dashboardLayoutState));return true}
+  catch(e){dashboardStatus("Could not save layout in this browser session.");return false}
+}
+function dashboardMarkDirty(){
+  dashboardLayoutDirty=true;
+  const save=document.getElementById("save-dashboard-layout");
+  const discard=document.getElementById("discard-dashboard-layout");
+  if(save)save.disabled=false;
+  if(discard)discard.disabled=false;
+  dashboardStatus("Unsaved layout changes.");
+}
+function dashboardSetEditMode(enabled){
+  dashboardLayoutEditing=!!enabled;
+  document.body.classList.toggle("dashboard-layout-editing",dashboardLayoutEditing);
+  const toggle=document.getElementById("edit-dashboard-toggle");
+  toggle.textContent=dashboardLayoutEditing?"Finish Editing":"Edit Dashboard";
+  toggle.setAttribute("aria-pressed",String(dashboardLayoutEditing));
+  document.getElementById("save-dashboard-layout").disabled=!dashboardLayoutDirty;
+  document.getElementById("discard-dashboard-layout").disabled=!dashboardLayoutDirty;
+  dashboardGrids.forEach(grid=>{
+    try{grid.enableMove(dashboardLayoutEditing);grid.enableResize(dashboardLayoutEditing)}catch(e){}
+  });
+  if(dashboardLayoutEditing){
+    dashboardRefreshWidgetManager();
+    dashboardStatus(dashboardLayoutDirty?"Unsaved layout changes.":"Edit mode: drag charts to move; use the resize handle to resize.");
+  }else{
+    dashboardStatus(dashboardLayoutDirty?"Changes not saved. Choose Save Layout or Discard Changes.":"Layout is read-only.");
+  }
+}
+function dashboardGridKey(container){
+  if(container.dataset.layoutGridKey)return container.dataset.layoutGridKey;
+  const panel=container.closest(".panel");
+  const panelId=panel?panel.id:"dashboard";
+  const classes=(container.classList?Array.from(container.classList):[]).filter(c=>c!=="grid-stack").sort().join("-");
+  const candidates=panel?Array.from(panel.querySelectorAll(DASHBOARD_GRID_SELECTOR)):Array.from(document.querySelectorAll(DASHBOARD_GRID_SELECTOR));
+  const same=candidates.filter(el=>(Array.from(el.classList).filter(c=>c!=="grid-stack").sort().join("-"))===classes);
+  const index=Math.max(0,same.indexOf(container));
+  container.dataset.layoutGridKey=`${panelId}:${classes||"charts"}:${index}`;
+  return container.dataset.layoutGridKey;
+}
+function dashboardWidgetId(chart){
+  const graph=chart.querySelector("[id]");
+  if(graph&&graph.id)return graph.id;
+  if(!chart.dataset.layoutWidgetId)chart.dataset.layoutWidgetId=`widget-${Math.random().toString(36).slice(2,10)}`;
+  return chart.dataset.layoutWidgetId;
+}
+function dashboardWidgetTitle(chart){
+  const graph=chart.querySelector(".js-plotly-plot");
+  const title=graph&&graph.layout&&graph.layout.title;
+  if(title){
+    const text=typeof title==="string"?title:title.text;
+    if(text)return String(text).replace(/<[^>]*>/g,"").slice(0,100);
+  }
+  const graphEl=chart.querySelector("[id]");
+  if(graphEl&&graphEl.id)return graphEl.id.replace(/[-_]/g," ");
+  return "Chart widget";
+}
+function dashboardInitialSize(chart,container){
+  const oneColumn=container.classList.contains("efficiency-charts")||container.classList.contains("account-main-pies")||chart.classList.contains("wide")||chart.classList.contains("waiting-chart");
+  const pie=chart.classList.contains("pie-chart");
+  return {w:oneColumn?12:6,h:container.classList.contains("efficiency-charts")?9:(pie?8:7)};
+}
+function dashboardTypeOptions(){
+  return [["original","Original"],["bar","Bar"],["line","Line"],["pie","Pie"]];
+}
+function dashboardCreateItem(container,chart){
+  if(chart.dataset.layoutWrapped==="1")return chart.closest(".grid-stack-item");
+  const widgetId=dashboardWidgetId(chart);
+  chart.dataset.layoutWrapped="1";
+  chart.dataset.layoutWidgetId=widgetId;
+  const item=document.createElement("div");
+  item.className="grid-stack-item";
+  item.dataset.layoutWidgetId=widgetId;
+  item.setAttribute("gs-id",widgetId);
+  item.setAttribute("data-gs-id",widgetId);
+  const content=document.createElement("div");
+  content.className="grid-stack-item-content";
+  const controls=document.createElement("div");
+  controls.className="widget-controls";
+  const handle=document.createElement("span");
+  handle.className="widget-drag-handle";
+  handle.textContent="↕ Move";
+  const title=document.createElement("span");
+  title.className="widget-short-title";
+  title.textContent=dashboardWidgetTitle(chart);
+  title.title=title.textContent;
+  const typeLabel=document.createElement("label");
+  typeLabel.textContent="Type ";
+  const typeSelect=document.createElement("select");
+  typeSelect.className="widget-chart-type";
+  typeSelect.setAttribute("aria-label","Chart type");
+  dashboardTypeOptions().forEach(([value,label])=>{
+    const option=document.createElement("option");option.value=value;option.textContent=label;typeSelect.appendChild(option);
+  });
+  typeLabel.appendChild(typeSelect);
+  typeSelect.value=dashboardLayoutState.widgets[widgetId]?.chartType||"original";
+  typeSelect.addEventListener("change",()=>{
+    const type=typeSelect.value;
+    if(type==="original")delete dashboardChartTypeOverrides[widgetId];
+    else dashboardChartTypeOverrides[widgetId]=type;
+    dashboardLayoutState.widgets[widgetId]=dashboardLayoutState.widgets[widgetId]||{};
+    dashboardLayoutState.widgets[widgetId].chartType=type;
+    dashboardApplyChartType(widgetId,type);
+    dashboardMarkDirty();
+  });
+  const hide=document.createElement("button");
+  hide.type="button";hide.className="widget-hide-button";hide.textContent="Hide";
+  hide.title="Hide this chart widget";
+  hide.addEventListener("click",()=>dashboardSetWidgetVisible(widgetId,false));
+  controls.append(handle,title,typeLabel,hide);
+  const initial=dashboardInitialSize(chart,container);
+  const savedGrid=dashboardLayoutState.grids[dashboardGridKey(container)];
+  const saved=savedGrid&&savedGrid.find(item=>item.id===widgetId);
+  const widgetState=dashboardLayoutState.widgets[widgetId]||{};
+  if(saved){
+    if(Number.isFinite(saved.x))item.setAttribute("gs-x",saved.x);
+    if(Number.isFinite(saved.y))item.setAttribute("gs-y",saved.y);
+    // Migrate the old default half-width Job counts widget to a full row.
+    // Preserve deliberately moved/resized layouts (e.g. x=6 or non-half widths).
+    if(widgetId==="job-flow-chart"&&Number(saved.w)===6&&Number(saved.x||0)===0){saved.w=12;}
+    if(Number.isFinite(saved.w))item.setAttribute("gs-w",saved.w);
+    if(Number.isFinite(saved.h))item.setAttribute("gs-h",saved.h);
+  }else{
+    item.setAttribute("gs-w",initial.w);item.setAttribute("gs-h",initial.h);
+  }
+  content.append(controls,chart);item.appendChild(content);container.appendChild(item);
+  if(widgetState.hidden)item.classList.add("layout-widget-hidden");
+  if(widgetState.chartType&&widgetState.chartType!=="original")dashboardChartTypeOverrides[widgetId]=widgetState.chartType;
+  return item;
+}
+function dashboardGridOptions(){
+  return {column:12,cellHeight:60,margin:10,float:true,animate:true,oneColumnMode:true,oneColumnSize:700,
+    draggable:{handle:".widget-drag-handle"},resizable:{handles:"e,se,s,sw,w"},alwaysShowResizeHandle:false};
+}
+function dashboardInitGrids(){
+  if(typeof GridStack==="undefined")return;
+  for(const [container,grid] of Array.from(dashboardGrids.entries())){
+    if(!document.contains(container)){try{grid.destroy(false)}catch(e){}dashboardGrids.delete(container)}
+  }
+  document.querySelectorAll(DASHBOARD_GRID_SELECTOR).forEach(container=>{
+    const directCharts=Array.from(container.children).filter(el=>el.classList&&el.classList.contains("chart")&&el.dataset.layoutWrapped!=="1");
+    if(!directCharts.length&&!dashboardGrids.has(container))return;
+    const key=dashboardGridKey(container);
+    container.classList.add("grid-stack");
+    directCharts.forEach(chart=>dashboardCreateItem(container,chart));
+    let grid=dashboardGrids.get(container);
+    if(!grid){
+      grid=GridStack.init(dashboardGridOptions(),container);
+      dashboardGrids.set(container,grid);
+      grid.enableMove(dashboardLayoutEditing);grid.enableResize(dashboardLayoutEditing);
+      grid.on("change",()=>{if(dashboardLayoutEditing)dashboardMarkDirty()});
+      grid.on("resizestop",(event,element)=>{
+        const graph=element&&element.querySelector(".js-plotly-plot");
+        if(graph&&window.Plotly&&Plotly.Plots)Plotly.Plots.resize(graph);
+      });
+    }else if(directCharts.length){
+      container.querySelectorAll(":scope > .grid-stack-item").forEach(item=>{
+        if(!item.gridstackNode&&!item.classList.contains("layout-widget-hidden"))grid.makeWidget(item);
+      });
+    }
+    // A saved visibility setting is applied after GridStack has registered the item.
+    container.querySelectorAll(":scope > .grid-stack-item").forEach(item=>{
+      const id=item.dataset.layoutWidgetId;
+      const state=dashboardLayoutState.widgets[id];
+      if(state&&state.hidden&&!item.classList.contains("layout-widget-hidden")){
+        if(item.gridstackNode)grid.removeWidget(item,false,false);
+        item.classList.add("grid-stack-item","layout-widget-hidden");
+      }
+      const select=item.querySelector(".widget-chart-type");
+      if(select&&state&&state.chartType)select.value=state.chartType;
+    });
+    void key;
+  });
+}
+function dashboardSetWidgetVisible(widgetId,visible){
+  const item=document.querySelector(`.grid-stack-item[data-layout-widget-id="${CSS.escape(widgetId)}"]`);
+  if(!item)return;
+  const container=item.parentElement;
+  const grid=dashboardGrids.get(container);
+  const state=dashboardLayoutState.widgets[widgetId]||{};
+  state.hidden=!visible;dashboardLayoutState.widgets[widgetId]=state;
+  if(visible){
+    item.classList.remove("layout-widget-hidden");
+    if(grid&&!item.gridstackNode){
+      item.classList.add("grid-stack-item");
+      item.setAttribute("gs-id",widgetId);item.setAttribute("data-gs-id",widgetId);
+      const opts={};
+      ["x","y","w","h"].forEach(k=>{if(Number.isFinite(state[k]))opts[k]=state[k]});
+      grid.makeWidget(item,opts);
+    }
+  }else{
+    if(item.gridstackNode){
+      const node=item.gridstackNode;
+      state.x=node.x;state.y=node.y;state.w=node.w;state.h=node.h;
+      if(grid)grid.removeWidget(item,false,false);
+    }
+    item.classList.add("grid-stack-item","layout-widget-hidden");
+  }
+  dashboardMarkDirty();dashboardRefreshWidgetManager();
+}
+function dashboardRefreshWidgetManager(){
+  const list=document.getElementById("dashboard-widget-list");
+  if(!list)return;
+  const items=Array.from(document.querySelectorAll(".grid-stack-item[data-layout-widget-id]"));
+  if(!items.length){list.innerHTML='<p class="widget-manager-hint">No chart widgets are available yet. Open a dashboard tab to load its charts.</p>';return}
+  list.innerHTML="";
+  const seen=new Set();
+  items.forEach(item=>{
+    const id=item.dataset.layoutWidgetId;if(!id||seen.has(id))return;seen.add(id);
+    const chart=item.querySelector(".chart");if(!chart)return;
+    const state=dashboardLayoutState.widgets[id]||{};
+    const label=document.createElement("label");
+    const checkbox=document.createElement("input");checkbox.type="checkbox";checkbox.checked=!state.hidden;
+    checkbox.addEventListener("change",()=>dashboardSetWidgetVisible(id,checkbox.checked));
+    const name=document.createElement("span");name.textContent=dashboardWidgetTitle(chart);
+    label.append(checkbox,name);list.appendChild(label);
+  });
+}
+function dashboardCollectLayout(){
+  const merged=dashboardReadLayout();
+  merged.version=1;merged.grids=merged.grids||{};merged.widgets=merged.widgets||{};
+  merged.duplicates=dashboardLayoutState.duplicates||merged.duplicates||{};
+  dashboardGrids.forEach((grid,container)=>{
+    const key=dashboardGridKey(container);
+    merged.grids[key]=Array.from(container.querySelectorAll(":scope > .grid-stack-item")).map(item=>{
+      const node=item.gridstackNode||{};
+      const id=item.dataset.layoutWidgetId||item.getAttribute("gs-id");
+      const prior=(merged.grids[key]||[]).find(x=>x.id===id)||{};
+      const state=merged.widgets[id]||{};
+      return {id,x:Number.isFinite(node.x)?node.x:(Number(item.getAttribute("gs-x"))||state.x||prior.x||0),
+        y:Number.isFinite(node.y)?node.y:(Number(item.getAttribute("gs-y"))||state.y||prior.y||0),
+        w:Number.isFinite(node.w)?node.w:(Number(item.getAttribute("gs-w"))||state.w||prior.w||6),
+        h:Number.isFinite(node.h)?node.h:(Number(item.getAttribute("gs-h"))||state.h||prior.h||7)};
+    }).filter(item=>item.id);
+  });
+  document.querySelectorAll(".grid-stack-item[data-layout-widget-id]").forEach(item=>{
+    const id=item.dataset.layoutWidgetId;
+    const state=merged.widgets[id]||{};
+    state.hidden=item.classList.contains("layout-widget-hidden");
+    const select=item.querySelector(".widget-chart-type");
+    if(select)state.chartType=select.value;
+    merged.widgets[id]=state;
+  });
+  return merged;
+}
+function dashboardGridByKey(key){
+  for(const [container,grid] of dashboardGrids.entries())if(dashboardGridKey(container)===key)return {container,grid};
+  return null;
+}
+function dashboardRefreshAddWidgetPicker(){
+  const select=document.getElementById("dashboard-add-widget-source");
+  if(!select)return;
+  const previous=select.value;
+  select.innerHTML="";
+  const sources=Array.from(document.querySelectorAll(".grid-stack-item[data-layout-widget-id]")).filter(item=>{
+    if(item.classList.contains("layout-widget-hidden"))return false;
+    const chart=item.querySelector(".chart");
+    const graph=chart&&chart.querySelector(".js-plotly-plot");
+    return !!(graph&&graph.data&&graph.data.length);
+  });
+  sources.forEach(item=>{
+    const id=item.dataset.layoutWidgetId;
+    const chart=item.querySelector(".chart");
+    const option=document.createElement("option");
+    option.value=id;
+    option.textContent=dashboardWidgetTitle(chart);
+    select.appendChild(option);
+  });
+  if(sources.some(item=>item.dataset.layoutWidgetId===previous))select.value=previous;
+  if(!sources.length){
+    const option=document.createElement("option");option.value="";option.textContent="Open a tab and wait for its charts to load";select.appendChild(option);
+  }
+}
+function dashboardCreateDuplicate(spec,sourceGraph){
+  if(document.querySelector(`.grid-stack-item[data-layout-widget-id="${CSS.escape(spec.id)}"]`))return false;
+  const found=dashboardGridByKey(spec.gridKey);
+  if(!found||!sourceGraph||!sourceGraph.data)return false;
+  const sourceItem=sourceGraph.closest(".grid-stack-item");
+  const sourceChart=sourceItem&&sourceItem.querySelector(".chart");
+  if(!sourceChart)return false;
+  const chart=document.createElement("div");
+  chart.className=sourceChart.className;
+  chart.dataset.layoutDuplicate="1";
+  chart.dataset.layoutSourceId=spec.sourceId;
+  const graph=document.createElement("div");graph.id=spec.id;
+  chart.appendChild(graph);
+  const item=dashboardCreateItem(found.container,chart);
+  item.dataset.layoutWidgetId=spec.id;item.setAttribute("gs-id",spec.id);item.setAttribute("data-gs-id",spec.id);
+  const title=item.querySelector(".widget-short-title");
+  if(title){title.textContent=spec.title||dashboardWidgetTitle(sourceChart);title.title=title.textContent}
+  if(spec.hidden){item.classList.add("layout-widget-hidden");}
+  if(!item.classList.contains("layout-widget-hidden")&&!item.gridstackNode)found.grid.makeWidget(item);
+  const data=dashboardOriginalPlotData.get(spec.sourceId)||sourceGraph.data;
+  const layout=dashboardOriginalPlotLayouts.get(spec.sourceId)||sourceGraph.layout||{};
+  Plotly.react(spec.id,data,dashboardResponsiveLayout(layout),{responsive:true,displaylogo:false});
+  return true;
+}
+function dashboardRestoreAvailableDuplicates(){
+  const duplicates=dashboardLayoutState.duplicates||{};
+  Object.entries(duplicates).forEach(([id,spec])=>{
+    if(!spec||!spec.sourceId||!spec.gridKey)return;
+    if(document.querySelector(`.grid-stack-item[data-layout-widget-id="${CSS.escape(id)}"]`))return;
+    const sourceGraph=document.getElementById(spec.sourceId);
+    if(sourceGraph&&sourceGraph.data&&sourceGraph.data.length)dashboardCreateDuplicate({...spec,id},sourceGraph);
+  });
+  dashboardRefreshAddWidgetPicker();
+}
+function dashboardAddWidget(){
+  const sourceId=document.getElementById("dashboard-add-widget-source").value;
+  const sourceGraph=document.getElementById(sourceId);
+  if(!sourceId||!sourceGraph||!sourceGraph.data){dashboardStatus("Choose a chart that has finished loading first.");return}
+  const sourceItem=sourceGraph.closest(".grid-stack-item");
+  const sourceChart=sourceItem&&sourceItem.querySelector(".chart");
+  const container=sourceItem&&sourceItem.parentElement;
+  if(!sourceChart||!container){dashboardStatus("Could not locate the selected chart widget.");return}
+  const id=`custom-widget-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`;
+  const spec={sourceId,gridKey:dashboardGridKey(container),panelId:container.closest(".panel")?.id||"",title:dashboardWidgetTitle(sourceChart)};
+  dashboardLayoutState.duplicates=dashboardLayoutState.duplicates||{};
+  dashboardLayoutState.duplicates[id]=spec;
+  dashboardCreateDuplicate({...spec,id},sourceGraph);
+  dashboardMarkDirty();
+  dashboardRefreshWidgetManager();
+  dashboardRefreshAddWidgetPicker();
+  dashboardStatus("Widget added. Save Layout to keep it for this browser session.");
+}
+function dashboardSaveLayout(){
+  dashboardLayoutState=dashboardCollectLayout();
+  if(dashboardWriteLayout()){
+    dashboardLayoutDirty=false;
+    document.getElementById("save-dashboard-layout").disabled=true;
+    document.getElementById("discard-dashboard-layout").disabled=true;
+    dashboardStatus("Layout saved for this cluster in the current browser session.");
+  }
+}
+function dashboardDiscardLayout(){
+  dashboardLayoutState=dashboardReadLayout();
+  dashboardLayoutDirty=false;
+  // Rebuild the grid DOM so the saved coordinates and visibility are re-applied.
+  dashboardGrids.forEach((grid,container)=>{
+    const items=Array.from(container.children).filter(item=>item.dataset&&item.dataset.layoutWidgetId);
+    try{grid.destroy(false)}catch(e){}
+    items.forEach(item=>{
+      const chart=item.querySelector(".chart");
+      const id=item.dataset.layoutWidgetId;
+      const isDuplicate=chart&&chart.dataset.layoutDuplicate==="1";
+      if(isDuplicate&&!((dashboardLayoutState.duplicates||{})[id])){
+        item.remove();
+        return;
+      }
+      if(chart){chart.dataset.layoutWrapped="0";container.insertBefore(chart,item)}
+      item.remove();
+    });
+    container.classList.remove("grid-stack");
+  });
+  dashboardGrids.clear();
+  dashboardSetEditMode(false);
+  dashboardInitGrids();
+  dashboardSetEditMode(false);
+  dashboardChartTypeOverridesClear();
+  document.querySelectorAll(".grid-stack-item[data-layout-widget-id]").forEach(item=>{
+    const id=item.dataset.layoutWidgetId, state=dashboardLayoutState.widgets[id]||{};
+    if(state.chartType&&state.chartType!=="original")dashboardChartTypeOverrides[id]=state.chartType;
+    const select=item.querySelector(".widget-chart-type");if(select)select.value=state.chartType||"original";
+    dashboardApplyChartType(id,state.chartType||"original");
+  });
+  document.getElementById("save-dashboard-layout").disabled=true;
+  document.getElementById("discard-dashboard-layout").disabled=true;
+  dashboardRefreshWidgetManager();
+  dashboardStatus("Restored the last saved layout.");
+}
+function dashboardChartTypeOverridesClear(){
+  Object.keys(dashboardChartTypeOverrides).forEach(key=>delete dashboardChartTypeOverrides[key]);
+}
+function dashboardResetLayout(){
+  if(!window.confirm(`Reset the saved dashboard layout for ${ACTIVE_CLUSTER_NAME}?`))return;
+  try{sessionStorage.removeItem(DASHBOARD_LAYOUT_KEY)}catch(e){}
+  dashboardLayoutState={version:1,grids:{},widgets:{},duplicates:{}};
+  dashboardLayoutDirty=false;
+  dashboardDiscardLayout();
+  dashboardStatus("Default layout restored for this cluster.");
+}
+function dashboardTransformData(data,type){
+  if(type==="original")return data;
+  return (data||[]).map(trace=>{
+    const copy={...trace};
+    if(copy.type==="pie"||Array.isArray(copy.labels)&&Array.isArray(copy.values)){
+      if(type==="pie")return {...copy,type:"pie"};
+      copy.x=copy.labels;copy.y=copy.values;delete copy.labels;delete copy.values;
+      copy.type=type==="line"?"scatter":"bar";
+      if(type==="line")copy.mode="lines+markers";else delete copy.mode;
+      return copy;
+    }
+    if(type==="pie"){
+      const labels=Array.isArray(copy.x)?copy.x:(Array.isArray(copy.y)?copy.y.map((_,i)=>String(i+1)):[]);
+      const values=Array.isArray(copy.y)?copy.y:[];
+      return {type:"pie",labels,values,name:copy.name,hovertemplate:"%{label}<br>%{value}<extra></extra>"};
+    }
+    if(type==="line"){copy.type="scatter";copy.mode="lines+markers"}
+    else{copy.type="bar";delete copy.mode}
+    return copy;
+  });
+}
+function dashboardResponsiveLayout(layout){
+  const responsive={...(layout||{}),autosize:true};
+  delete responsive.height;
+  return responsive;
+}
+function dashboardApplyChartType(widgetId,type){
+  const graph=document.getElementById(widgetId);
+  if(!graph||!graph.data)return;
+  const originalData=dashboardOriginalPlotData.get(widgetId)||graph.data;
+  const originalLayout=dashboardOriginalPlotLayouts.get(widgetId)||graph.layout||{};
+  try{originalPlotlyReact(graph,dashboardTransformData(originalData,type),dashboardResponsiveLayout(originalLayout),{responsive:true,displaylogo:false})}catch(e){}
+}
+Plotly.react=function(target,data,layout,config){
+  const graph=typeof target==="string"?document.getElementById(target):target;
+  const id=graph&&graph.id;
+  if(id){
+    dashboardOriginalPlotData.set(id,(data||[]).map(trace=>({...trace})));
+    dashboardOriginalPlotLayouts.set(id,layout||{});
+    const type=dashboardChartTypeOverrides[id];
+    if(type&&type!=="original")data=dashboardTransformData(data,type);
+  }
+  const rendered=originalPlotlyReact(target,data,dashboardResponsiveLayout(layout),config);
+  return Promise.resolve(rendered).then(result=>{
+    if(id){
+      const chart=graph&&graph.closest(".chart");
+      const item=graph&&graph.closest(".grid-stack-item");
+      const shortTitle=item&&item.querySelector(".widget-short-title");
+      if(shortTitle&&chart){shortTitle.textContent=dashboardWidgetTitle(chart);shortTitle.title=shortTitle.textContent}
+      dashboardRestoreAvailableDuplicates();
+    }
+    return result;
+  });
+};
+function dashboardMutationHasWidget(node){
+  if(!node||node.nodeType!==1)return false;
+  const selector=".chart, .charts, .efficiency-charts, .account-level-charts, .account-main-pies";
+  return (node.matches&&node.matches(selector))||!!(node.querySelector&&node.querySelector(selector));
+}
+function dashboardInstallLayoutObserver(){
+  const observer=new MutationObserver(records=>{
+    const relevant=records.some(record=>
+      Array.from(record.addedNodes).some(dashboardMutationHasWidget)||
+      Array.from(record.removedNodes).some(dashboardMutationHasWidget));
+    if(!relevant||dashboardLayoutObserverQueued)return;
+    dashboardLayoutObserverQueued=true;
+    requestAnimationFrame(()=>{
+      dashboardLayoutObserverQueued=false;
+      dashboardInitGrids();
+      if(dashboardLayoutEditing)dashboardRefreshWidgetManager();
+    });
+  });
+  observer.observe(document.querySelector(".panels-root")||document.body,{childList:true,subtree:true});
+}
+let dashboardLayoutObserverQueued=false;
+
+document.getElementById("edit-dashboard-toggle").addEventListener("click",()=>{
+  if(!dashboardLayoutEditing){dashboardInitGrids();dashboardSetEditMode(true)}
+  else dashboardSetEditMode(false);
+});
+document.getElementById("save-dashboard-layout").addEventListener("click",dashboardSaveLayout);
+document.getElementById("discard-dashboard-layout").addEventListener("click",dashboardDiscardLayout);
+document.getElementById("reset-dashboard-layout").addEventListener("click",dashboardResetLayout);
+document.getElementById("dashboard-widget-manager").addEventListener("toggle",()=>dashboardRefreshWidgetManager());
+document.getElementById("dashboard-add-widget").addEventListener("toggle",()=>dashboardRefreshAddWidgetPicker());
+document.getElementById("dashboard-add-widget-confirm").addEventListener("click",dashboardAddWidget);
+dashboardLayoutState=dashboardReadLayout();
+dashboardInitGrids();
+dashboardInstallLayoutObserver();
+dashboardRefreshWidgetManager();
+dashboardRefreshAddWidgetPicker();
+
 loadOverview();
 </script>
 </body></html>

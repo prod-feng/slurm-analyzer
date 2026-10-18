@@ -90,6 +90,9 @@ def _empty_frame():
             "jobs_started": pl.Int64,
             "jobs_completed": pl.Int64,
             "jobs_failed": pl.Int64,
+            "jobs_timeout": pl.Int64,
+            "jobs_cancelled": pl.Int64,
+            "jobs_other_terminal": pl.Int64,
             "jobs_submitted": pl.Int64,
             "avg_allocated_cpus_per_job": pl.Float64,
             "avg_allocated_gpus_per_job": pl.Float64,
@@ -180,6 +183,7 @@ def job_time_series(df, start=None, end=None, interval="1h"):
                 "start_time",
                 "end_time",
                 "state_category",
+                "state",
                 "ncpus",
                 "gpu_count",
                 "allocated_memory_bytes",
@@ -201,11 +205,38 @@ def job_time_series(df, start=None, end=None, interval="1h"):
             submit_bucket = _bucket_floor(submitted_at, interval)
             submissions[submit_bucket] = submissions.get(submit_bucket, 0) + 1
 
+        # Count terminal events from end_time independently of start_time.
+        # Slurm jobs can be cancelled while pending and therefore have no
+        # start_time; skipping those rows here used to silently omit them
+        # from the event-count chart. Only a real end_time denotes a terminal
+        # event; the synthetic `now` below is for active-allocation tracking.
+        state = str(row.get("state_category") or "other").strip().lower()
+        raw_state = str(row.get("state") or "").strip().upper()
+        # Databases imported before timeout became its own normalized category
+        # still have the original Slurm state. Use it to split TIMEOUT records
+        # without requiring users to re-import their history.
+        if raw_state.startswith("TIMEOUT"):
+            state = "timeout"
+        recorded_end = _parse_datetime(row.get("end_time"))
+        if recorded_end is not None and requested_start <= recorded_end < requested_end:
+            terminal_bucket = _bucket_floor(recorded_end, interval)
+            terminal = terminals.setdefault(terminal_bucket, [0, 0, 0, 0, 0])
+            if state == "completed":
+                terminal[0] += 1
+            elif state == "timeout":
+                terminal[2] += 1
+            elif state == "failed":
+                terminal[1] += 1
+            elif state == "cancelled":
+                terminal[3] += 1
+            else:
+                terminal[4] += 1
+
         job_start = _parse_datetime(row.get("start_time"))
         if job_start is None:
             continue
 
-        job_end = _parse_datetime(row.get("end_time")) or now
+        job_end = recorded_end or now
         if job_end <= requested_start or job_start >= requested_end:
             continue
 
@@ -219,8 +250,6 @@ def job_time_series(df, start=None, end=None, interval="1h"):
 
         cpu = _numeric(row.get("ncpus"))
         gpu = _numeric(row.get("gpu_count"))
-        state = str(row.get("state_category") or "other")
-
         start_event = events.setdefault(start_bucket, [0, 0, 0.0, 0.0])
         start_event[0] += 1
         # A started allocation is running regardless of its final Slurm state.
@@ -267,12 +296,6 @@ def job_time_series(df, start=None, end=None, interval="1h"):
                 if limit is not None:
                     try: sample["limit"].append(float(limit))
                     except (TypeError, ValueError): pass
-            if state == "completed":
-                terminals[end_bucket] = terminals.get(end_bucket, [0, 0, 0])
-                terminals[end_bucket][0] += 1
-            elif state == "failed":
-                terminals[end_bucket] = terminals.get(end_bucket, [0, 0, 0])
-                terminals[end_bucket][1] += 1
 
     result = []
     active_jobs = 0
@@ -289,7 +312,7 @@ def job_time_series(df, start=None, end=None, interval="1h"):
             allocated_cpus += delta[2]
             allocated_gpus += delta[3]
 
-        terminal = terminals.get(timestamp, [0, 0, 0])
+        terminal = terminals.get(timestamp, [0, 0, 0, 0, 0])
         result.append(
             {
                 "timestamp": timestamp,
@@ -300,6 +323,9 @@ def job_time_series(df, start=None, end=None, interval="1h"):
                 "jobs_started": starts.get(timestamp, 0),
                 "jobs_completed": terminal[0],
                 "jobs_failed": terminal[1],
+                "jobs_timeout": terminal[2],
+                "jobs_cancelled": terminal[3],
+                "jobs_other_terminal": terminal[4],
                 "jobs_submitted": submissions.get(timestamp, 0),
                 "avg_allocated_cpus_per_job": _mean(allocation_samples.get(timestamp, {}).get("cpus", [])),
                 "avg_allocated_gpus_per_job": _mean(allocation_samples.get(timestamp, {}).get("gpus", [])),
@@ -331,3 +357,92 @@ def job_time_series(df, start=None, end=None, interval="1h"):
         )
         for name, dtype in schema.items()
     })
+
+
+def job_wait_time_summary(df, start=None, end=None):
+    """Summarize queue wait for jobs submitted in the selected time range.
+
+    Wait is ``start_time - submit_time``. Jobs that have not started, have
+    invalid timestamps, or have negative waits are excluded because their
+    completed queue wait cannot be measured reliably yet.
+    """
+    if df is None or df.is_empty() or not {"submit_time", "start_time"}.issubset(df.columns):
+        return {"count": 0, "mean_seconds": None, "max_seconds": None}
+
+    now = datetime.now(UTC)
+    requested_end = _parse_datetime(end) if end else now
+    requested_start = _parse_datetime(start) if start else requested_end - timedelta(days=30)
+    if requested_start is None or requested_end is None or requested_end <= requested_start:
+        return {"count": 0, "mean_seconds": None, "max_seconds": None}
+
+    waits = []
+    for row in df.select(["submit_time", "start_time"]).to_dicts():
+        submitted_at = _parse_datetime(row.get("submit_time"))
+        started_at = _parse_datetime(row.get("start_time"))
+        if submitted_at is None or started_at is None:
+            continue
+        if not (requested_start <= submitted_at < requested_end):
+            continue
+        if started_at >= requested_end:
+            continue
+        wait_seconds = (started_at - submitted_at).total_seconds()
+        if wait_seconds >= 0:
+            waits.append(wait_seconds)
+
+    return {
+        "count": len(waits),
+        "mean_seconds": _mean(waits),
+        "max_seconds": max(waits) if waits else None,
+    }
+
+def job_wait_time_series(df, start=None, end=None, interval="1d"):
+    """Return bucketed mean and maximum queue wait for jobs submitted in range.
+
+    Each job is assigned to a bucket by its submission timestamp. Wait time is
+    ``start_time - submit_time``. Jobs that have not started, have invalid
+    timestamps, start outside the requested window, or have negative waits are
+    excluded. Empty buckets are included with null statistics to keep the time
+    axis continuous.
+    """
+    if interval not in _INTERVALS:
+        raise ValueError(
+            "Unsupported interval {!r}; choose one of {}".format(
+                interval, ", ".join(_INTERVALS)
+            )
+        )
+
+    requested_end = _parse_datetime(end) if end else datetime.now(UTC)
+    requested_start = _parse_datetime(start) if start else requested_end - timedelta(days=30)
+    if requested_start is None or requested_end is None or requested_end <= requested_start:
+        return []
+
+    buckets = {}
+    if df is not None and not df.is_empty() and {"submit_time", "start_time"}.issubset(df.columns):
+        for row in df.select(["submit_time", "start_time"]).to_dicts():
+            submitted_at = _parse_datetime(row.get("submit_time"))
+            started_at = _parse_datetime(row.get("start_time"))
+            if submitted_at is None or started_at is None:
+                continue
+            if not (requested_start <= submitted_at < requested_end):
+                continue
+            if started_at >= requested_end:
+                continue
+            wait_seconds = (started_at - submitted_at).total_seconds()
+            if wait_seconds < 0:
+                continue
+            bucket = _bucket_floor(submitted_at, interval)
+            buckets.setdefault(bucket, []).append(wait_seconds)
+
+    result = []
+    timestamp = _bucket_floor(requested_start, interval)
+    while timestamp < requested_end:
+        values = buckets.get(timestamp, [])
+        result.append({
+            "timestamp": timestamp.isoformat(),
+            "count": len(values),
+            "mean_seconds": _mean(values),
+            "max_seconds": max(values) if values else None,
+        })
+        timestamp = _bucket_next(timestamp, interval)
+    return result
+

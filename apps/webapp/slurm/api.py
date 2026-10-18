@@ -9,7 +9,7 @@ from django.views.decorators.http import require_GET, require_POST
 from slurm_analytics.sacct import SacctConfig
 from slurm_analytics.squeue import fetch_squeue
 from slurm_analytics.analytics import time_series
-from slurm_analytics.storage import query_df
+from slurm_analytics.storage import query_df, connect, get_metadata
 
 from .services import get_snapshot, refresh_slurm
 
@@ -38,18 +38,34 @@ def _snapshot_or_response():
 
 @require_GET
 def api_metadata(request):
-    snapshot, response = _snapshot_or_response()
-    if response:
-        return response
+    """Return lightweight database metadata without loading the full snapshot.
 
-    jobs = snapshot.ingestion.consolidated_jobs
-    return JsonResponse({
-        "ready": True,
-        "refreshed_at": snapshot.refreshed_at.isoformat(),
-        "job_count": jobs.height,
-        "step_count": snapshot.ingestion.steps.height,
-        "node_count": snapshot.nodes.height if snapshot.nodes is not None else None,
-    })
+    The DuckDB file is the durable source of truth. Counting rows here avoids
+    unpickling/rebuilding a multi-year Polars snapshot just to render Overview.
+    """
+    from datetime import datetime, timezone
+
+    try:
+        con = connect()
+        try:
+            tables = {row[0] for row in con.execute("SHOW TABLES").fetchall()}
+            if "ingestion_metadata" not in tables or get_metadata(con, "initialized", "false") != "true":
+                return _not_ready()
+            job_count = int(con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]) if "jobs" in tables else 0
+            step_count = int(con.execute("SELECT COUNT(*) FROM job_steps").fetchone()[0]) if "job_steps" in tables else 0
+            node_count = int(con.execute("SELECT COUNT(*) FROM node_inventory").fetchone()[0]) if "node_inventory" in tables else None
+            refreshed_at = get_metadata(con, "last_refresh_end") or get_metadata(con, "last_refresh_start")
+        finally:
+            con.close()
+        return JsonResponse({
+            "ready": True,
+            "refreshed_at": refreshed_at or datetime.now(timezone.utc).isoformat(),
+            "job_count": job_count,
+            "step_count": step_count,
+            "node_count": node_count,
+        })
+    except Exception as exc:
+        return JsonResponse({"error": "Unable to read database metadata: {}".format(exc)}, status=500)
 
 
 
@@ -322,17 +338,13 @@ def _calculate_overview_additional_metrics(start, end):
 @require_GET
 def api_summary(request):
     """Return date-range job outcomes/resource totals and live queue counts."""
-    snapshot, response = _snapshot_or_response()
-    if response:
-        return response
-
     from datetime import datetime, timedelta, timezone
 
     now = datetime.now(timezone.utc)
     start = request.GET.get("start")
     end = request.GET.get("end") or now.isoformat()
     if not start:
-        start = (now - timedelta(days=7)).isoformat()
+        start = (now - timedelta(days=30)).isoformat()
 
     # Outcome counts use end time, while CPU/GPU hours use allocation start
     # time. Running and pending counts are queried live from squeue below.
@@ -352,8 +364,8 @@ def api_summary(request):
                     CASE
                         WHEN upper(COALESCE(state, '')) LIKE 'COMPLETED%' THEN 'completed'
                         WHEN upper(COALESCE(state, '')) LIKE 'CANCELLED%' THEN 'cancelled'
+                        WHEN upper(COALESCE(state, '')) LIKE 'TIMEOUT%' THEN 'timeout'
                         WHEN upper(COALESCE(state, '')) LIKE 'FAILED%'
-                          OR upper(COALESCE(state, '')) LIKE 'TIMEOUT%'
                           OR upper(COALESCE(state, '')) LIKE 'NODE_FAIL%'
                           OR upper(COALESCE(state, '')) LIKE 'OUT_OF_MEMORY%'
                           OR upper(COALESCE(state, '')) LIKE 'PREEMPTED%'
@@ -391,6 +403,11 @@ def api_summary(request):
                 COUNT(*) FILTER (
                     WHERE ended_at >= TRY_CAST(? AS TIMESTAMPTZ)
                       AND ended_at < TRY_CAST(? AS TIMESTAMPTZ)
+                      AND summary_category = 'timeout'
+                ) AS timeout_count,
+                COUNT(*) FILTER (
+                    WHERE ended_at >= TRY_CAST(? AS TIMESTAMPTZ)
+                      AND ended_at < TRY_CAST(? AS TIMESTAMPTZ)
                       AND summary_category = 'other'
                 ) AS other_count,
                 COALESCE(SUM(
@@ -409,7 +426,7 @@ def api_summary(request):
                 ), 0) / 3600.0 AS gpu_hours
             FROM job_rows
             """,
-            [start, end] * 5 + [start, end, start, end],
+            [start, end] * 6 + [start, end, start, end],
         )
         row = historical.to_dicts()[0] if not historical.is_empty() else {}
     except Exception as exc:
@@ -431,6 +448,7 @@ def api_summary(request):
         "completed_count": int(row.get("completed_count") or 0),
         "cancelled_count": int(row.get("cancelled_count") or 0),
         "failed_count": int(row.get("failed_count") or 0),
+        "timeout_count": int(row.get("timeout_count") or 0),
         "other_count": int(row.get("other_count") or 0),
         "running_count": running_count,
         "pending_count": pending_count,
@@ -1086,14 +1104,12 @@ def api_jobs(request):
 
 @require_GET
 def api_timeseries(request):
-    """Return bucketed job/resource time-series data from the current snapshot."""
-    snapshot, response = _snapshot_or_response()
-    if response:
-        return response
+    """Return bucketed time-series data from DuckDB for the selected time range."""
+    from datetime import datetime, timedelta, timezone
 
     interval = request.GET.get("interval", "1h")
-    start = request.GET.get("start") or None
-    end = request.GET.get("end") or None
+    end = request.GET.get("end") or datetime.now(timezone.utc).isoformat()
+    start = request.GET.get("start") or (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
 
     try:
         # Historical charts must come from the persistent DuckDB store, not
@@ -1118,6 +1134,7 @@ def api_timeseries(request):
                     CAST(j.end_time AS VARCHAR) AS end_time,
                     CAST(j.maxrss AS VARCHAR) AS job_maxrss,
                     j.state_category,
+                    CAST(j.state AS VARCHAR) AS state,
                     j.ncpus,
                     j.gpu_count,
                     j.allocated_memory_bytes,
@@ -1142,6 +1159,7 @@ def api_timeseries(request):
                     "end_time": pl.String,
                     "job_maxrss": pl.String,
                     "state_category": pl.String,
+                    "state": pl.String,
                     "ncpus": pl.Float64,
                     "gpu_count": pl.Float64,
                     "allocated_memory_bytes": pl.Float64,
@@ -1195,17 +1213,17 @@ def api_timeseries(request):
                 historical_jobs = historical_jobs.with_columns(
                     pl.Series("max_rss_bytes", rss_values, dtype=pl.Float64, strict=False)
                 )
+            from slurm_analytics.timeseries import job_wait_time_summary, job_wait_time_series
+            waiting_summary = job_wait_time_summary(
+                historical_jobs, start=requested_start, end=requested_end
+            )
+            waiting_series = job_wait_time_series(
+                historical_jobs, start=requested_start, end=requested_end, interval=interval
+            )
             result = time_series(
                 historical_jobs,
                 start=requested_start,
                 end=requested_end,
-                interval=interval,
-            )
-        else:
-            result = time_series(
-                snapshot.ingestion.consolidated_jobs,
-                start=start,
-                end=end,
                 interval=interval,
             )
     except ValueError as exc:
@@ -1218,6 +1236,8 @@ def api_timeseries(request):
         "start": start,
         "end": end,
         "results": dataframe_to_records(result),
+        "waiting_summary": waiting_summary,
+        "waiting_series": waiting_series,
     })
 
 

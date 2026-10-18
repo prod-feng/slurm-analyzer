@@ -1,0 +1,30 @@
+
+[Unit]
+Description=Slurm Analytics Django Production Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# Replace these with your actual account and project path.
+User=fenzhang
+WorkingDirectory=/lustre/nvwulf/home/fenzhang/slurm-analyzer
+
+Environment=HOME=/lustre/nvwulf/home/fenzhang
+Environment=PYTHONUNBUFFERED=1
+
+ExecStart=/lustre/nvwulf/home/fenzhang/slurm-analyzer/run_production.sh
+
+Restart=on-failure
+RestartSec=5
+
+KillSignal=SIGTERM
+TimeoutStopSec=40
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+
