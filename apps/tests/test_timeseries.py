@@ -200,6 +200,7 @@ def test_wait_time_summary_uses_jobs_submitted_in_range():
     )
     assert summary["count"] == 2
     assert summary["mean_seconds"] == 4500
+    assert summary["median_seconds"] == 4500
     assert summary["max_seconds"] == 5400
 
 
@@ -231,6 +232,7 @@ def test_wait_time_series_groups_by_submission_bucket():
     assert len(rows) == 3
     assert rows[0]["count"] == 2
     assert rows[0]["mean_seconds"] == 5400
+    assert rows[0]["median_seconds"] == 5400
     assert rows[0]["max_seconds"] == 7200
     assert rows[1]["count"] == 1
     assert rows[1]["mean_seconds"] == 10800

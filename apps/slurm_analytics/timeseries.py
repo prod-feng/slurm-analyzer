@@ -110,6 +110,16 @@ def _mean(values):
     return (sum(values) / len(values)) if values else None
 
 
+def _median(values):
+    if not values:
+        return None
+    ordered = sorted(values)
+    middle = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[middle]
+    return (ordered[middle - 1] + ordered[middle]) / 2.0
+
+
 def _parse_memory_bytes(value):
     """Parse a Slurm MaxRSS value (e.g. 1200K, 3G); return None if absent."""
     if value is None:
@@ -367,13 +377,13 @@ def job_wait_time_summary(df, start=None, end=None):
     completed queue wait cannot be measured reliably yet.
     """
     if df is None or df.is_empty() or not {"submit_time", "start_time"}.issubset(df.columns):
-        return {"count": 0, "mean_seconds": None, "max_seconds": None}
+        return {"count": 0, "mean_seconds": None, "median_seconds": None, "max_seconds": None}
 
     now = datetime.now(UTC)
     requested_end = _parse_datetime(end) if end else now
     requested_start = _parse_datetime(start) if start else requested_end - timedelta(days=30)
     if requested_start is None or requested_end is None or requested_end <= requested_start:
-        return {"count": 0, "mean_seconds": None, "max_seconds": None}
+        return {"count": 0, "mean_seconds": None, "median_seconds": None, "max_seconds": None}
 
     waits = []
     for row in df.select(["submit_time", "start_time"]).to_dicts():
@@ -392,6 +402,7 @@ def job_wait_time_summary(df, start=None, end=None):
     return {
         "count": len(waits),
         "mean_seconds": _mean(waits),
+        "median_seconds": _median(waits),
         "max_seconds": max(waits) if waits else None,
     }
 
@@ -441,6 +452,7 @@ def job_wait_time_series(df, start=None, end=None, interval="1d"):
             "timestamp": timestamp.isoformat(),
             "count": len(values),
             "mean_seconds": _mean(values),
+            "median_seconds": _median(values),
             "max_seconds": max(values) if values else None,
         })
         timestamp = _bucket_next(timestamp, interval)

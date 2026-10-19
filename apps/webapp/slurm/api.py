@@ -51,18 +51,21 @@ def api_metadata(request):
             tables = {row[0] for row in con.execute("SHOW TABLES").fetchall()}
             if "ingestion_metadata" not in tables or get_metadata(con, "initialized", "false") != "true":
                 return _not_ready()
-            job_count = int(con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]) if "jobs" in tables else 0
-            step_count = int(con.execute("SELECT COUNT(*) FROM job_steps").fetchone()[0]) if "job_steps" in tables else 0
-            node_count = int(con.execute("SELECT COUNT(*) FROM node_inventory").fetchone()[0]) if "node_inventory" in tables else None
+            # Do not COUNT(*) across multi-year accounting tables just to paint
+            # the Overview header. Those counts are not used by the UI, and on
+            # multi-GB databases this adds avoidable work to every first load.
+            job_count = get_metadata(con, "job_count")
+            step_count = get_metadata(con, "step_count")
+            node_count = get_metadata(con, "node_count")
             refreshed_at = get_metadata(con, "last_refresh_end") or get_metadata(con, "last_refresh_start")
         finally:
             con.close()
         return JsonResponse({
             "ready": True,
             "refreshed_at": refreshed_at or datetime.now(timezone.utc).isoformat(),
-            "job_count": job_count,
-            "step_count": step_count,
-            "node_count": node_count,
+            "job_count": int(job_count) if job_count is not None else None,
+            "step_count": int(step_count) if step_count is not None else None,
+            "node_count": int(node_count) if node_count is not None else None,
         })
     except Exception as exc:
         return JsonResponse({"error": "Unable to read database metadata: {}".format(exc)}, status=500)
@@ -379,6 +382,16 @@ def api_summary(request):
                         ELSE 'other'
                     END AS summary_category
                 FROM jobs
+                WHERE (
+                    TRY_CAST(submit_time AS TIMESTAMPTZ) >= TRY_CAST(? AS TIMESTAMPTZ)
+                    AND TRY_CAST(submit_time AS TIMESTAMPTZ) < TRY_CAST(? AS TIMESTAMPTZ)
+                ) OR (
+                    TRY_CAST(start_time AS TIMESTAMPTZ) >= TRY_CAST(? AS TIMESTAMPTZ)
+                    AND TRY_CAST(start_time AS TIMESTAMPTZ) < TRY_CAST(? AS TIMESTAMPTZ)
+                ) OR (
+                    TRY_CAST(end_time AS TIMESTAMPTZ) >= TRY_CAST(? AS TIMESTAMPTZ)
+                    AND TRY_CAST(end_time AS TIMESTAMPTZ) < TRY_CAST(? AS TIMESTAMPTZ)
+                )
             )
             SELECT
                 COUNT(*) FILTER (
@@ -426,7 +439,7 @@ def api_summary(request):
                 ), 0) / 3600.0 AS gpu_hours
             FROM job_rows
             """,
-            [start, end] * 6 + [start, end, start, end],
+            [start, end] * 3 + [start, end] * 6 + [start, end, start, end],
         )
         row = historical.to_dicts()[0] if not historical.is_empty() else {}
     except Exception as exc:
@@ -1108,6 +1121,7 @@ def api_timeseries(request):
     from datetime import datetime, timedelta, timezone
 
     interval = request.GET.get("interval", "1h")
+    include_details = request.GET.get("details", "0").lower() in ("1", "true", "yes")
     end = request.GET.get("end") or datetime.now(timezone.utc).isoformat()
     start = request.GET.get("start") or (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
 
@@ -1168,51 +1182,54 @@ def api_timeseries(request):
                     "time_limit_seconds": pl.Float64,
                 },
             )
-            # Parse MaxRSS values from job-step rows in Python instead of relying
-            # on SQL regexp behavior, which varies across DuckDB versions and
-            # can silently yield NULL for otherwise valid sacct values.
-            import re
-            step_rows = query_df(
-                """
-                SELECT s.canonical_job_id, s.maxrss
-                FROM job_steps s
-                INNER JOIN jobs j
-                  ON CAST(s.canonical_job_id AS VARCHAR) = CAST(j.canonical_job_id AS VARCHAR)
-                WHERE s.maxrss IS NOT NULL
-                  AND ((j.start_time IS NOT NULL
-                        AND j.start_time < TRY_CAST(? AS TIMESTAMPTZ)
-                        AND (j.end_time IS NULL OR j.end_time > TRY_CAST(? AS TIMESTAMPTZ)))
-                    OR (j.submit_time >= TRY_CAST(? AS TIMESTAMPTZ)
-                        AND j.submit_time < TRY_CAST(? AS TIMESTAMPTZ)))
-                """,
-                [requested_end, requested_start, requested_start, requested_end],
-            )
-            def parse_rss_bytes(value):
-                if value is None:
-                    return None
-                match = re.match(r"^\s*([0-9]+(?:\.[0-9]+)?)\s*([KMGTPE]?)\s*[cCnN]?\s*$", str(value), re.I)
-                if not match:
-                    return None
-                powers = {"": 0, "K": 1, "M": 2, "G": 3, "T": 4, "P": 5, "E": 6}
-                return float(match.group(1)) * (1024.0 ** powers[match.group(2).upper()])
-            rss_by_job = {}
-            for step in step_rows.to_dicts() if not step_rows.is_empty() else []:
-                rss = parse_rss_bytes(step.get("maxrss"))
-                if rss is not None:
-                    key = str(step.get("canonical_job_id") or "")
-                    if key:
-                        rss_by_job[key] = max(rss_by_job.get(key, 0.0), rss)
-            if "canonical_job_id" in historical_jobs.columns:
-                rss_values = [
-                    rss_by_job.get(str(job_id or "")) or parse_rss_bytes(raw_rss)
-                    for job_id, raw_rss in zip(
-                        historical_jobs.get_column("canonical_job_id").to_list(),
-                        historical_jobs.get_column("job_maxrss").to_list(),
-                    )
-                ]
-                historical_jobs = historical_jobs.with_columns(
-                    pl.Series("max_rss_bytes", rss_values, dtype=pl.Float64, strict=False)
+            # job_steps can contain millions of records. It is only needed for
+            # recorded-MaxRSS enrichment on the optional CPU/GPU/RAM/runtime
+            # charts, so do not scan it for the default Overview request.
+            if include_details:
+                # Parse MaxRSS values from job-step rows in Python instead of
+                # relying on SQL regexp behavior across DuckDB versions.
+                import re
+                step_rows = query_df(
+                    """
+                    SELECT s.canonical_job_id, s.maxrss
+                    FROM job_steps s
+                    INNER JOIN jobs j
+                      ON CAST(s.canonical_job_id AS VARCHAR) = CAST(j.canonical_job_id AS VARCHAR)
+                    WHERE s.maxrss IS NOT NULL
+                      AND ((j.start_time IS NOT NULL
+                            AND j.start_time < TRY_CAST(? AS TIMESTAMPTZ)
+                            AND (j.end_time IS NULL OR j.end_time > TRY_CAST(? AS TIMESTAMPTZ)))
+                        OR (j.submit_time >= TRY_CAST(? AS TIMESTAMPTZ)
+                            AND j.submit_time < TRY_CAST(? AS TIMESTAMPTZ)))
+                    """,
+                    [requested_end, requested_start, requested_start, requested_end],
                 )
+                def parse_rss_bytes(value):
+                    if value is None:
+                        return None
+                    match = re.match(r"^\s*([0-9]+(?:\.[0-9]+)?)\s*([KMGTPE]?)\s*[cCnN]?\s*$", str(value), re.I)
+                    if not match:
+                        return None
+                    powers = {"": 0, "K": 1, "M": 2, "G": 3, "T": 4, "P": 5, "E": 6}
+                    return float(match.group(1)) * (1024.0 ** powers[match.group(2).upper()])
+                rss_by_job = {}
+                for step in step_rows.to_dicts() if not step_rows.is_empty() else []:
+                    rss = parse_rss_bytes(step.get("maxrss"))
+                    if rss is not None:
+                        key = str(step.get("canonical_job_id") or "")
+                        if key:
+                            rss_by_job[key] = max(rss_by_job.get(key, 0.0), rss)
+                if "canonical_job_id" in historical_jobs.columns:
+                    rss_values = [
+                        rss_by_job.get(str(job_id or "")) or parse_rss_bytes(raw_rss)
+                        for job_id, raw_rss in zip(
+                            historical_jobs.get_column("canonical_job_id").to_list(),
+                            historical_jobs.get_column("job_maxrss").to_list(),
+                        )
+                    ]
+                    historical_jobs = historical_jobs.with_columns(
+                        pl.Series("max_rss_bytes", rss_values, dtype=pl.Float64, strict=False)
+                    )
             from slurm_analytics.timeseries import job_wait_time_summary, job_wait_time_series
             waiting_summary = job_wait_time_summary(
                 historical_jobs, start=requested_start, end=requested_end
@@ -1238,6 +1255,7 @@ def api_timeseries(request):
         "results": dataframe_to_records(result),
         "waiting_summary": waiting_summary,
         "waiting_series": waiting_series,
+        "details_included": include_details,
     })
 
 
