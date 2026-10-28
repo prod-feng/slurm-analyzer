@@ -445,16 +445,23 @@ def api_summary(request):
     except Exception as exc:
         return JsonResponse({"error": "Unable to calculate period summary: {}".format(exc)}, status=500)
 
-    # Running and pending are current queue states, sourced live from squeue.
-    try:
-        queue = fetch_squeue()
-        states = [str(value or "").strip().upper() for value in queue.get_column("state").to_list()]
-        running_count = sum(value.startswith("RUNNING") for value in states)
-        pending_count = sum(value.startswith("PENDING") for value in states)
-    except Exception:
-        # Never report a failed live query as zero jobs.
+    # Running and pending are live queue states, not historical database
+    # metrics. Only query squeue for clusters configured as live; otherwise
+    # every imported cluster would incorrectly show the same local queue.
+    cluster = getattr(request, "slurm_cluster", {}) or {}
+    if cluster.get("mode", "live") != "live":
         running_count = None
         pending_count = None
+    else:
+        try:
+            queue = fetch_squeue()
+            states = [str(value or "").strip().upper() for value in queue.get_column("state").to_list()]
+            running_count = sum(value.startswith("RUNNING") for value in states)
+            pending_count = sum(value.startswith("PENDING") for value in states)
+        except Exception:
+            # Never report a failed live query as zero jobs.
+            running_count = None
+            pending_count = None
 
     return JsonResponse({
         "job_count": int(row.get("job_count") or 0),
