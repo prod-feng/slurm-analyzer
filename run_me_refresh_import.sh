@@ -8,6 +8,8 @@ IMAGE="${PROJECT_ROOT}/apptainer/slurm-manager-ldap-django.sif"
 LOGFILE="${PROJECT_ROOT}/refresh_slurm_data.log"
 LOCKFILE="${PROJECT_ROOT}/refresh_slurm_data.lock"
 
+CLUSTER="cluster2"
+
 # Log output to both the terminal and the log file.
 exec > >(tee -a "$LOGFILE") 2>&1
 
@@ -33,8 +35,10 @@ run_manage() {
     singularity exec \
         --pwd /workspace \
         --env "PATH=/cm/shared/apps/slurm/current/bin:${PATH}" \
-        --env "SLURM_DUCKDB_PATH=/workspace/data/slurm.duckdb" \
+        --env "SLURM_DUCKDB_PATH=/workspace/data/${CLUSTER}.duckdb" \
         --bind "${SOURCE}:/workspace" \
+        --bind /usr/lib64/libreadline.so.7:/lib/x86_64-linux-gnu/libreadline.so.7:ro \
+        --bind /usr/lib64/libhistory.so.7:/lib/x86_64-linux-gnu/libhistory.so.7:ro \
         --bind /etc/nsswitch.conf:/etc/nsswitch.conf:ro \
         --bind /run/nslcd:/run/nslcd:ro \
         --bind /usr/lib64/libmunge.so.2:/usr/lib64/libmunge.so.2:ro \
@@ -48,10 +52,10 @@ run_manage() {
 
 # Refresh the persistent Slurm database.
 run_manage refresh_slurm_db  \
-  --history-file "/workspace/export_data/sacct_*.out" \
-  --accounts-file /workspace/export_data/accounts.json \
-  --nodes-file /workspace/export_data/nodes.json \
-  --partitions-file /workspace/export_data/partitions.json \
+  --history-file "/workspace/export_data/${CLUSTER}/sacct_*.out" \
+  --accounts-file /workspace/export_data/${CLUSTER}/accounts.json \
+  --nodes-file /workspace/export_data/${CLUSTER}/nodes.json \
+  --partitions-file /workspace/export_data/${CLUSTER}/partitions.json \
   --start 2026-10-01 --end 2026-10-27 
 
 # Refresh the dashboard snapshot.
