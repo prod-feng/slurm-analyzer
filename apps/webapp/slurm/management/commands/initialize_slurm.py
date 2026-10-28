@@ -9,7 +9,7 @@ import glob
 import json
 import os
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 
 from slurm_analytics.pipeline import ingest_sacct
 from slurm_analytics.sacct import SacctConfig
@@ -163,10 +163,10 @@ class Command(BaseCommand):
         end = parse_dt(options["end"]) or datetime.now(UTC)
 
         if start >= end:
-            raise self.CommandError("--start must be before --end")
+            raise CommandError("--start must be before --end")
 
         if options["chunk_days"] < 1:
-            raise self.CommandError("--chunk-days must be positive")
+            raise CommandError("--chunk-days must be positive")
 
         history_file = options.get("history_file")
 
@@ -184,14 +184,14 @@ class Command(BaseCommand):
                 elif os.path.isfile(item):
                     expanded_history_files.append(item)
                 else:
-                    raise self.CommandError(
+                    raise CommandError(
                         "History file or pattern did not match any files: {}".format(item)
                     )
 
             # Deduplicate paths while preserving their first-seen order.
             history_file = list(dict.fromkeys(expanded_history_files))
             if not history_file:
-                raise self.CommandError(
+                raise CommandError(
                     "No history files found. Check --history-file paths and patterns."
                 )
 
@@ -291,7 +291,7 @@ class Command(BaseCommand):
                     raise ValueError("JSON contains no accounts or associations")
                 replace_accounts(accounts, associations)
             except (OSError, ValueError, TypeError, KeyError) as exc:
-                raise self.CommandError("Unable to import accounts file {}: {}".format(accounts_file, exc))
+                raise CommandError("Unable to import accounts file {}: {}".format(accounts_file, exc))
             self.stdout.write(self.style.SUCCESS(
                 "Imported accounts={} associations={} from {}".format(
                     len(accounts), len(associations), accounts_file
@@ -326,7 +326,7 @@ class Command(BaseCommand):
                 finally:
                     con.close()
             except (OSError, ValueError, TypeError, KeyError) as exc:
-                raise self.CommandError("Unable to import node inventory {}: {}".format(nodes_file, exc))
+                raise CommandError("Unable to import node inventory {}: {}".format(nodes_file, exc))
             self.stdout.write(self.style.SUCCESS(
                 "Imported node inventory: {} nodes from {}".format(node_frame.height, nodes_file)
             ))
@@ -351,7 +351,7 @@ class Command(BaseCommand):
                 finally:
                     con.close()
             except (OSError, ValueError, TypeError, KeyError) as exc:
-                raise self.CommandError("Unable to import partition inventory {}: {}".format(partitions_file, exc))
+                raise CommandError("Unable to import partition inventory {}: {}".format(partitions_file, exc))
             self.stdout.write(self.style.SUCCESS(
                 "Imported partition inventory: {} partitions from {}".format(partition_frame.height, partitions_file)
             ))

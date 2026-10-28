@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from django.core.management import call_command
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 
 from slurm_analytics.pipeline import ingest_sacct
 from slurm_analytics.sacct import SacctConfig
@@ -104,10 +104,10 @@ class Command(BaseCommand):
             return
 
         if options["chunk_days"] < 1:
-            raise self.CommandError("--chunk-days must be positive")
+            raise CommandError("--chunk-days must be positive")
 
         if options["overlap_minutes"] < 0:
-            raise self.CommandError("--overlap-minutes cannot be negative")
+            raise CommandError("--overlap-minutes cannot be negative")
 
         con = connect()
         try:
@@ -119,7 +119,7 @@ class Command(BaseCommand):
 
         if start is None:
             if not through:
-                raise self.CommandError(
+                raise CommandError(
                     "Database is not initialized; run initialize_slurm first."
                 )
             start = parse_dt(through) - timedelta(
@@ -129,7 +129,7 @@ class Command(BaseCommand):
         end = parse_dt(options["end"]) if options["end"] else datetime.now(UTC)
 
         if start >= end:
-            raise self.CommandError("--start must be before --end")
+            raise CommandError("--start must be before --end")
 
         total_jobs = 0
         total_steps = 0
